@@ -108,3 +108,10 @@ cd ${dir}/rnaseq_quant
 date;time Rscript ../gene_level_quant.R &> ../quant_gene_level.txt
 
 conda deactivate
+
+source activate basic
+
+cd $dir
+date; time python look_at_reps.py
+
+conda deactivate

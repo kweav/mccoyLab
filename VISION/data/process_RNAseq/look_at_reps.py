@@ -35,7 +35,7 @@ for ct in ct_rep_OI:
         '''there are 5 of these. Let's just add them to the new df'''
         new_abundances_df[ct] = abundances_df[full_column_names[where_col]]
 
-print(new_abundances_df)
+#print(new_abundances_df)
 
 def add_trendline(x, y, ax):
     z = np.polyfit(x, y, 1)
