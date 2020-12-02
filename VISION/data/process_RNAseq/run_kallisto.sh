@@ -24,7 +24,7 @@ allSamples=(SRX669482 SRX669483 SRX669484 SRX669485 SRX669486 SRX669487 SRX66948
 allCTs=(LTHSC HSC MPP CLP CMP GMP MF Granulocyte MON B CD4 CD8 NK MEP ERYA ERYB)
 for INDEX in ${!allSamples[@]}
 do
-	SAMPLE=${allSamples[$INDEX]}	
+	SAMPLE=${allSamples[$INDEX]}
 	CT=${allCTs[$INDEX]}
 	mkdir ${dir}/rnaseq_quant/${SAMPLE}_${CT} #make corresponding directory for later kallisto output
 	mkdir ${SAMPLE}_${CT}
@@ -35,8 +35,8 @@ do
 	do
 		prefetch ${SRA_array[$INDEX_R]} &>> ${SAMPLE}_${CT}.txt && fastq-dump ${SRA_array[$INDEX_R]} &>> ${SAMPLE}_${CT}.txt
 	done
-	cd ${dir}/rnaseq_fastq/LaraAstiaso2014	
-done 
+	cd ${dir}/rnaseq_fastq/LaraAstiaso2014
+done
 
 # #fastq-dump paired-end reads from Heuston et al 2018 PRJNA63471 SRP013703
 cd ${dir}/rnaseq_fastq/Heuston2018
@@ -44,7 +44,7 @@ allSamples2=(SRX3010287 SRX3010288 SRX3009974 SRX3009975 SRX3010022 SRX3010023 S
 allCTs2=(LSK LSK CMP CMP GMP GMP MEP MEP CFUE CFUE ERY ERY CFUMK CFUMK IMK IMK MON MON NEU NEU G1E G1E ER4 ER4)
 for INDEX2 in ${!allSamples2[@]}
 do
-	SAMPLE2=${allSamples2[$INDEX2]}	
+	SAMPLE2=${allSamples2[$INDEX2]}
 	CT2=${allCTs2[$INDEX2]}
 	mkdir ${dir}/rnaseq_quant/${SAMPLE2}_${CT2} #make corresponding directory for later kallisto output
 	mkdir ${SAMPLE2}_${CT2}
@@ -58,7 +58,7 @@ do
 	cd ${dir}/rnaseq_fastq/Heuston2018
 done
 
-conda deactivate 
+conda deactivate
 cd $dir
 
 #run kallisto
@@ -87,9 +87,24 @@ done
 #quantify the paired-end reads
 for INDEX2 in ${!allSamples2[@]}
 do
-	SAMPLE2=${allSamples2[$INDEX2]}	
+	SAMPLE2=${allSamples2[$INDEX2]}
 	CT2=${allCTs2[$INDEX2]}
 	kallisto quant -i mm10_index_kallisto.idx -b 100 --seed 38 -o ${dir}/rnaseq_quant/${SAMPLE2}_${CT2} ${dir}/rnaseq_fastq/Heuston2018/${SAMPLE2}_${CT2}/*.fastq -t 40 --pseudobam --genomebam -g Mus_musculus.GRCm38.96.gtf -c mm10.chrom.sizes.new
 done
+
+conda deactivate
+
+cd $dir
+
+source activate basic
+
+date;time python create_tx2gene_df.py Mus_musculus.GRCm38.96.gtf
+
+conda deactivate
+
+source activate r_env
+
+cd ${dir}/rnaseq_quant
+date;time Rscript ../gene_level_quant.R &> ../quant_gene_level.txt
 
 conda deactivate
