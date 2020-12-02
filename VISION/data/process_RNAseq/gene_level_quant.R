@@ -12,3 +12,6 @@ files <- file.path(dir, files_list, "abundance.h5")
 names(files) <- files_list
 txi.kallisto <- tximport(files, type="kallisto", tx2gene=tx2gene, txOut = FALSE) #this will summarize at the gene-level
 list.save(txi.kallisto, '../txi.kallisto.list.rdata')
+#txi.kallisto <- list.load('../txi.kallisto.list.rdata')
+#typeof(txi.kallisto$abundance)
+write.csv(txi.kallisto$abundance, '../txi.kallisto.abundances.csv')
