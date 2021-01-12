@@ -469,11 +469,30 @@ class regress_gene_cre_random():
 			checked.append(current_i)
 		return np.array(new_subset), checked, iterator_obj, to_return_current
 
+	def move_iterator_for_sorted(self, iterator_obj, current_i, next_i):
+		while True:
+			try:
+				new_subset = next(iterator_obj)
+				current_i += 1
+			except StopIteration:
+				'''shouldn't actually need this'''
+				logging.error("Should not happen")
+			if current_i == next_i:
+				new_subset = next(iterator_obj)
+				break
+		yield np.array(new_subset)
+
+	def indice_iterator(self, powerset_size, gene_index):
+		np.random.seed(int((gene_index+1)*self.seed))
+		indice_iterator = iter(sorted(np.random.choice(np.arange(powerset_size), size=self.iter_val, replace=False)))
+		return indice_iterator
 
 	def get_from_powerset(self, iterator_obj, checked, current_i, powerset_size, num_passing):
 		new_i, next_i = self.check_and_get_i(checked, current_i, powerset_size)
 		new_subset, checked, iterator_obj, returned_current = self.move_iterator(current_i, new_i, next_i, checked, iterator_obj, num_passing)
 		return new_subset, checked, iterator_obj, returned_current
+
+
 
 	def drive_random_iter(self):
 		'''
@@ -481,7 +500,7 @@ class regress_gene_cre_random():
 		initialize empty list, checked
 		create the iterator object by calling self.powerset_generator()
 		find the powerset size by calling self.find_num_in_powerset()
-		pick the first current_i to begin with, matching first element in iterator
+		make an iterator of all of the random indices we'll check, sorted.
 
 		for each iter
 		call self.get_from_powerset()
