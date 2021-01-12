@@ -35,16 +35,16 @@ def main():
 	check_pc(args, args.pc_only)
 	setup_threads(args.threads)
 	model = regress_gene_cre_random(args.train_cre_state_file, args.train_tss_state_file, args.train_exp_file,
-	                				args.test_cre_state_file, args.test_tss_state_file, args.test_exp_file,
-	                				args.output_pair_file, args.output_beta_file,
-	                				args.chr_sizes,
-	                				args.dist_gamma,
-	                				args.use_corr, args.abs_bool,
-	                				abc_dist=args.abc_dist, element_dist=args.element_dist, abc_thresh=args.abc_thresh, exclude_wp=args.exclude_wp, exclude_wp_dist=args.exclude_wp_dist, dn_cross_bound=args.dn_cross_bound,
-	                				log_props=args.log_props, log_props_base=args.log_props_base, log_props_add_val=args.log_props_add_val,
-	                				filter0=args.filter0, cutState0=args.cutState0, zero_val=args.zero_val,
-	                				iter_val=args.iter_val, seed=args.seed,
-	                				run_Gibbs=args.run_Gibbs, burn_in=args.burn_in, init_sigma_sqr=args.init_sigma_sqr, vary_sigma_sqr=args.vary_sigma_sqr)
+									args.test_cre_state_file, args.test_tss_state_file, args.test_exp_file,
+									args.output_pair_file, args.output_beta_file,
+									args.chr_sizes,
+									args.dist_gamma,
+									args.use_corr, args.abs_bool,
+									abc_dist=args.abc_dist, element_dist=args.element_dist, abc_thresh=args.abc_thresh, exclude_wp=args.exclude_wp, exclude_wp_dist=args.exclude_wp_dist, dn_cross_bound=args.dn_cross_bound,
+									log_props=args.log_props, log_props_base=args.log_props_base, log_props_add_val=args.log_props_add_val,
+									filter0=args.filter0, cutState0=args.cutState0, zero_val=args.zero_val,
+									iter_val=args.iter_val, seed=args.seed,
+									run_Gibbs=args.run_Gibbs, burn_in=args.burn_in, init_sigma_sqr=args.init_sigma_sqr, vary_sigma_sqr=args.vary_sigma_sqr)
 
 	if args.chroms == "all":
 		chrom_list = ['chr{}'.format(i) for i in np.hstack((np.arange(1,20), 'X'))]
@@ -56,7 +56,7 @@ def main():
 		model.subset_based_ongroup(args.exp_type, args.m_thresh, args.s_thresh)
 		model.set_initial_betas(args.init_beta_method, args.init_beta_rlim, args.init_beta_file, args.init_beta_PrRe_file)
 		model.find_initial_weighted_sum()
-		model.test_abc_adjust()
+		model.drive_random_iter(3)
 
 def setup_logging(logfile_oi):
 	logfile=logfile_oi
@@ -196,10 +196,11 @@ class regress_gene_cre_random():
 
 		self.exp_values_all, self.cellIndex, self.cell_to_index, self.TSS_chr_all, self.TSSs_all = self.load_expression(train_exp_file)
 		self.cellN = self.cellIndex.shape[0]
+		print(self.cellN)
 		self.TSS_window_props_all, self.TSS_window_chr_all = self.load_TSS_window_states(train_tss_state_file)
 		self.cre_props_all, self.cre_chr_all, self.cre_coords_all = self.load_cre_states(train_cre_state_file)
 		self.stateN = self.cre_props_all.shape[2] #Note this value will be indicitive of whether state 0 was cut or not
-
+		print(self.stateN)
 		self.chrSizes = {x: int(y) for x,y in (line.strip('\r\n').split() for line in open(chr_sizes))}
 
 	def find_valid_cellTypes(self, cellIndexOI):
@@ -231,7 +232,7 @@ class regress_gene_cre_random():
 	def load_cre_states(self, cre_state_file):
 		npzfile = np.load(cre_state_file, allow_pickle=True)
 		valid = self.find_valid_cellTypes(npzfile['cellIndex'])
-		cre_props_valid = npzfile['props'].astype(np.float64)
+		cre_props_valid = npzfile['props'].astype(np.float64)[:,valid,:]
 		cre_index = npzfile['ccREIndex']
 		cre_chr = cre_index[:,0]
 		cre_coords = cre_index[:,1:].astype(np.int32)
@@ -313,7 +314,7 @@ class regress_gene_cre_random():
 	def find_initial_weighted_sum(self):
 		'''find weighted sum of ccRE props with initial coeffs
 		given a 3 dimensional array ccreN * cellN * stateN with p_ijk equal to the proportion of ccre_i for celltype_j in state_k
-		        1 dimensional array stateN with c_i equal to the initial coefficient for state_i
+				1 dimensional array stateN with c_i equal to the initial coefficient for state_i
 		return a 2 dimensional array ccreN * cellN with w_ij equal to the sum of l = 0 to 26 of c_l*p_ijl'''
 		self.cre_weighted_sum = np.sum(self.cre_props * self.initial_coeffs, axis=2)
 
@@ -382,12 +383,15 @@ class regress_gene_cre_random():
 		return within_bool, none_within
 
 	def adjust_abc(self, to_adjust, to_adjust_parent, TSS, starts, starts_parent, stops, stops_parent):
+		print(to_adjust.shape)
 		'''First we multiply the activity by the contact'''
 		adjusted_pt1 = self.adjust_by_distance(to_adjust, TSS, starts, stops)
+		print(adjusted_pt1.shape)
 		'''Next we need to divide by the summed activity*contact for everything within 5Mbp'''
 		'''find everything within 5Mbp'''
 		within_bool, none_within_flag = self.find_within(self.abc_dist, TSS)
 		for_denom = np.sum(self.adjust_by_distance(to_adjust_parent[within_bool], TSS, starts_parent[within_bool], stops_parent[within_bool]))
+		print(for_denom.shape)
 		adjusted = adjusted_pt1/for_denom
 		return adjusted
 
@@ -407,7 +411,7 @@ class regress_gene_cre_random():
 				quit()
 
 	def powerset_generator(self, num_passing):
-	   	'''create an iterator object which makes a powerset, excluding the first empty set and the last full set
+		'''create an iterator object which makes a powerset, excluding the first empty set and the last full set
 		By definition, powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
 		In practice, powerset_generator([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3)
 		Further, because it's a generator and I'll use next() to grab subsets (while I want to randomly pick subsets) I've got some fancy shuffling.
@@ -423,51 +427,51 @@ class regress_gene_cre_random():
 	def find_num_in_powerset(self, num_passing):
 		return ((2**num_passing)-2)
 
-	def check_and_get_i(self, checked, current_i, powerset_size):
-		'''Should be called before self.move_iterator()
-		Inputs: checked, list, which indices (i's) have been sampled/used in analysis already
-		current_i, integer, where the powerset iterator '''
-		new_i = False
-		next_i = 0
-		if (current_i in checked) or (current_i >= powerset_size):
-			new_i = True
-			np.random.seed(current_i)
-			next_i = np.random.choice(np.setdiff1d(np.arange(powerset_size), checked, assume_unique=True))
-		return new_i, next_i
-
-	def move_iterator(self, current_i, new_i, next_i, checked, iterator_obj, num_passing):
-		'''This function is super cool cause it'll move through the iterator to get to a specific subset, even resetting the iterator if it needs to
-			Should be called after self.check_and_get_i()
-		Inputs: current_i, integer, where the powerset iterator is at following a single next(iterator_obj) call
-			   new_i, boolean, whether or not we need to move the powerset iterator to be at next_i instead of current_i, from self.check_and_get_i()
-			   next_i, integer, where the powerset iterator needs to be at if new_i is True, from self.check_and_get_i()
-			   checked, list, which indices (i's) have been sampled/used in analysis already
-			   iterator_obj, an iterator object, for the powerset that will be at current_i with a single next(iterator_obj) call
-			   num_passing, an integer, the number of CREs passing the within boundaries requirements
-		Returns: new_subset, a numpy array, the new subset randomly selected from the powerset iterator
-		  		 checked, list, updated with the new indice (i) that has been sampled/used in analysis already
-				 iterator_obj, an iterator object, for the powerset that will be at to_return_current with a single next(iterator_obj) call.
-				 to_return_current, an integer, the indice (i) where the powerset iterator will be following a single next(iterator_obj) call.
-			   '''
-		if new_i:
-			while True:
-				try:
-					new_subset = next(iterator_obj)
-					current_i += 1
-				except StopIteration:
-					'''reset the iterator'''
-					current_i = 0
-					iterator_obj = self.powerset_generator(num_passing)
-				if current_i == next_i:
-					new_subset = next(iterator_obj)
-					break
-			to_return_current = current_i + 1
-			checked.append(current_i-1)
-		else:
-			new_subset = next(iterator_obj)
-			to_return_current = current_i + 1
-			checked.append(current_i)
-		return np.array(new_subset), checked, iterator_obj, to_return_current
+	# def check_and_get_i(self, checked, current_i, powerset_size):
+	# 	'''Should be called before self.move_iterator()
+	# 	Inputs: checked, list, which indices (i's) have been sampled/used in analysis already
+	# 	current_i, integer, where the powerset iterator '''
+	# 	new_i = False
+	# 	next_i = 0
+	# 	if (current_i in checked) or (current_i >= powerset_size):
+	# 		new_i = True
+	# 		np.random.seed(current_i)
+	# 		next_i = np.random.choice(np.setdiff1d(np.arange(powerset_size), checked, assume_unique=True))
+	# 	return new_i, next_i
+	#
+	# def move_iterator(self, current_i, new_i, next_i, checked, iterator_obj, num_passing):
+	# 	'''This function is super cool cause it'll move through the iterator to get to a specific subset, even resetting the iterator if it needs to
+	# 		Should be called after self.check_and_get_i()
+	# 	Inputs: current_i, integer, where the powerset iterator is at following a single next(iterator_obj) call
+	# 		   new_i, boolean, whether or not we need to move the powerset iterator to be at next_i instead of current_i, from self.check_and_get_i()
+	# 		   next_i, integer, where the powerset iterator needs to be at if new_i is True, from self.check_and_get_i()
+	# 		   checked, list, which indices (i's) have been sampled/used in analysis already
+	# 		   iterator_obj, an iterator object, for the powerset that will be at current_i with a single next(iterator_obj) call
+	# 		   num_passing, an integer, the number of CREs passing the within boundaries requirements
+	# 	Returns: new_subset, a numpy array, the new subset randomly selected from the powerset iterator
+	# 	  		 checked, list, updated with the new indice (i) that has been sampled/used in analysis already
+	# 			 iterator_obj, an iterator object, for the powerset that will be at to_return_current with a single next(iterator_obj) call.
+	# 			 to_return_current, an integer, the indice (i) where the powerset iterator will be following a single next(iterator_obj) call.
+	# 		   '''
+	# 	if new_i:
+	# 		while True:
+	# 			try:
+	# 				new_subset = next(iterator_obj)
+	# 				current_i += 1
+	# 			except StopIteration:
+	# 				'''reset the iterator'''
+	# 				current_i = 0
+	# 				iterator_obj = self.powerset_generator(num_passing)
+	# 			if current_i == next_i:
+	# 				new_subset = next(iterator_obj)
+	# 				break
+	# 		to_return_current = current_i + 1
+	# 		checked.append(current_i-1)
+	# 	else:
+	# 		new_subset = next(iterator_obj)
+	# 		to_return_current = current_i + 1
+	# 		checked.append(current_i)
+	# 	return np.array(new_subset), checked, iterator_obj, to_return_current
 
 	def move_iterator_for_sorted(self, iterator_obj, current_i, next_i):
 		while True:
@@ -476,25 +480,29 @@ class regress_gene_cre_random():
 				current_i += 1
 			except StopIteration:
 				'''shouldn't actually need this'''
-				logging.error("Should not happen")
+				logging.error("Something bad happened with iteration")
+				break
 			if current_i == next_i:
 				new_subset = next(iterator_obj)
 				break
-		yield np.array(new_subset)
+			elif current_i > next_i:
+				break
+		yield new_subset
 
 	def indice_iterator(self, powerset_size, gene_index):
 		np.random.seed(int((gene_index+1)*self.seed))
 		indice_iterator = iter(sorted(np.random.choice(np.arange(powerset_size), size=self.iter_val, replace=False)))
 		return indice_iterator
 
-	def get_from_powerset(self, iterator_obj, checked, current_i, powerset_size, num_passing):
-		new_i, next_i = self.check_and_get_i(checked, current_i, powerset_size)
-		new_subset, checked, iterator_obj, returned_current = self.move_iterator(current_i, new_i, next_i, checked, iterator_obj, num_passing)
-		return new_subset, checked, iterator_obj, returned_current
+	# def get_from_powerset(self, iterator_obj, checked, current_i, powerset_size, num_passing):
+	# 	new_i, next_i = self.check_and_get_i(checked, current_i, powerset_size)
+	# 	new_subset, checked, iterator_obj, returned_current = self.move_iterator(current_i, new_i, next_i, checked, iterator_obj, num_passing)
+	# 	return new_subset, checked, iterator_obj, returned_current
 
+	def evalute_pairing(self):
+		return 0
 
-
-	def drive_random_iter(self):
+	def drive_random_iter(self, i):
 		'''
 		for each gene, get the num passing using whatever cutoffs <-- can I parallelize this part of it?
 		initialize empty list, checked
@@ -503,9 +511,35 @@ class regress_gene_cre_random():
 		make an iterator of all of the random indices we'll check, sorted.
 
 		for each iter
-		call self.get_from_powerset()
+		call move_iterator_for_sorted
 		evaluate pairing
 		'''
+		#get num_passing
+		TSS = self.TSSs[i]
+		CREs_within_bool, none_within_bool = self.find_within(self.element_dist, TSS)
+		if none_within_bool: #no pairing possible
+			return
+		else:
+			CREs_within_weighted_sum = self.cre_weighted_sum[CREs_within_bool]
+			CREs_within_starts = self.cre_coords[CREs_within_bool, 0]
+			CREs_within_stops = self.cre_coords[CREs_within_bool, 1]
 
+			'''adjusted_by_abc should be np.sum(CREs_within_bool) X self.cellN -- and it is now!'''
+			adjusted_by_abc = self.adjust_abc(CREs_within_weighted_sum, self.cre_weighted_sum, TSS, CREs_within_starts, self.cre_coords[:,0], CREs_within_stops, self.cre_coords[:,1])
+			#Find num_passing for each cell type using the abc_thresh
+			#add code for using correlation if use_corr
 
+			#need gene_index either from a for loop or by calling this function in a parallel manner
+			powerset_it_obj = self.powerset_generator(num_passing)
+			powerset_size = self.find_num_in_powerset(num_passing)
+			indice_it_obj = self.indice_iterator(powerset_size, gene_index)
+			current_i = 0
+			while True:
+				try:
+					next_indice = next(indice_it_obj)
+				except StopIteration:
+					break
+				new_subset = np.array(list(self.move_iterator_for_sorted(powerset_it_obj, current_i, next_indice)))
+				current_i = next_indice + 1
+				#evaluate pairing for each cell type
 main()
