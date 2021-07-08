@@ -1,39 +1,22 @@
-library(DESeq2)
-library(SummarizedExperiment)
-library(rtracklayer)
+
 library(tidyverse)
 library(data.table)
-library(caret)
-library(splitstackshape)
-library(readxl)
-library(janitor)
-library(ggrepel)
-library(ggthemes)
-library(ggplot2)
-library(edgeR)
-library(plotly)
-library(survcomp)
-library(cowplot)
-library(AnnotationDbi)
-library(EnsDb.Hsapiens.v86)
-library(VennDiagram)
+#library(splitstackshape)
+#library(caret)
+
 
 #`%notin%` <- Negate(`%in%`)
 
 ###Files
-args <- commandArgs(trailingOnly = TRUE)
+#args <- commandArgs(trailingOnly = TRUE)
 where_run <- "local" #args[1]
 random_seed <-  7319 #5281 #6133 #8888 #9746  #2999 #4263 #7319 #277 #198 #42 #3854 #as.integer(args[2])
 set.seed(random_seed)
 if (where_run == "comp") {
-  load("/home/kweave23/create/create_summarized_experiment.Rdata")
-  file_gencode <- "/home/kweave23/create/resources/gencode.v34.annotation.gtf"
   file_meta <- "/home/kweave23/create/tidied_meta_CREATE_kw.csv"
 } else if (where_run == "local"){
-  load("/Users/kateweaver/mccoyLab/collabs/doubleseq_2021/create_summarized_experiment.Rdata")
-  file_gencode <- "/Users/kateweaver/genomes/hg38_genome/gencode.v34.annotation.gtf"
   file_meta <- "/Users/kateweaver/mccoyLab/collabs/doubleseq_2021/tidied_meta_CREATE_kw.csv"
-} else {stop("no known file path to summarized experiment")}
+} else {stop("no known file path to metadata")}
 
 ###load meta data
 meta <- read.csv(file_meta, row.names=1) %>%
@@ -94,7 +77,7 @@ pie_plot(slices, lbls, "Study Participants -- study participant aware split")
 
 # ### stratified method
 # df <- data.frame("upid"=unique_participant_ID, "embryo_counts"=counts_participant_ID, "oocyte_age" = o_age_by_pid, "sperm_age" = s_age_by_pid)
-# test_df <- stratified(df, c("oocyte_age", "embryo_counts"), .25)
+# test_df <- splitstackshape::stratified(df, c("oocyte_age", "embryo_counts"), .25)
 # test.index <- which(unique_participant_ID %in% test_df$upid)
 
 # train.index <- which(unique_participant_ID %notin% test_df$upid)
