@@ -8,7 +8,7 @@ Went with study participant aware training and test split
 
 ## Third  step:  DE analysis
 
-Went with the limma + duplicateCorrelation DE analaysis and a 50% FDR.
+Went with the limma + duplicateCorrelation DE analaysis on just the training data and a 50% FDR.
 
 ## Fourth step: GEAS + pathway analysis
 
