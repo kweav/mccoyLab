@@ -12,5 +12,6 @@ do
     awk -v var=$IDEAS$CT$BED '{if ($4 == var) {print}}' random_${MATCH}_int_all.bed > random_${MATCH}_int_$CT$BED
     awk '{print $1, $2, $3, $6"_"$7"_"$8}' OFS='\t' random_${MATCH}_int_$CT$BED > random_${MATCH}_istate_$CT$BED
     bedtools groupby -i random_${MATCH}_istate_$CT$BED -g 1,2,3 -c 4 -o collapse > random_${MATCH}_collapse_$CT$BED
+    awk '{print $1, $2 $3, $2"_"$3"_0"}' OFS='\t' random_${MATCH}_v_all.bed >> random_${MATCH}_collapse_$CT$BED
   done
 done
