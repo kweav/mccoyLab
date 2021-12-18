@@ -1,0 +1,211 @@
+---
+title: "Train Test Splits CReATe"
+author: "Kate Weaver"
+date: "12/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(patchwork)
+library(ggplot2)
+library(scales)
+```
+
+## Read in metadata from expanded batch 2 split
+```{r}
+
+full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20211217.csv", row.names = 1)
+
+meta_train <- full_meta_withSet[which(full_meta_withSet$set == "train"),]
+train_unique_study_participants <- table(meta_train$Study_Participant_ID)
+
+meta_test <- full_meta_withSet[which(full_meta_withSet$set == "test"),]
+test_unique_study_particpants <- table(meta_test$Study_Participant_ID)
+```
+
+### Defining a couple of plotting functions to save myself typing
+
+```{r}
+pie_plot <- function(data_frame_toplot, main_title){
+  data_frame_toplot <- data_frame_toplot %>% mutate(prop = round(slices / sum(data_frame_toplot$slices) *100))
+  
+  ggplot(data_frame_toplot, aes(x="", y=slices, fill=set)) + geom_bar(stat = "identity", width=1) + coord_polar("y", start=0) +ggtitle(main_title) + theme_void() + geom_text(aes(position = "stack", label = paste0(prop, "%"), vjust=0), color="white", size=6)
+}
+
+violin_plot <- function(data_frame_toplot, ylabel){
+  ggplot(data_frame_toplot, aes(x=name, y=val, fill=name)) + scale_x_discrete(limits=c("train", "test")) + geom_violin(scale="width", adjust=1, width=0.5) + labs(y=ylabel, x="set") + geom_boxplot(width = 0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+}
+
+bar_plot <- function(data_frame_toplot, ylabel, xlabel, title){
+  gp <- ggplot(data_frame_toplot, aes(x=name, y=val, fill=col)) + geom_bar(stat = "identity") + labs(y=ylabel, x =xlabel, title=title)+ theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + scale_fill_manual(values=unique(data_frame_toplot$col)) + theme(legend.position = "none")
+  return(gp)
+}
+```
+
+
+### Pie Plots
+```{r}
+pie_plot(data.frame(slices = c(nrow(meta_train), nrow(meta_test)), set=factor(c("train", "test"), levels=c("train", "test"))), "Embryos\nstudy participant aware split\n(with Batch 2)")
+
+pie_plot(data.frame(slices = c(length(train_unique_study_participants), length(test_unique_study_particpants)), set = factor(c("train", "test"), levels=c("train","test"))), "Study participants\nstudy participant aware split\n(with Batch 2)")
+```
+
+### Bar Plots
+```{r}
+trainbar.x <- as.numeric(table(train_unique_study_participants))
+names(trainbar.x) <- names(table(train_unique_study_participants))
+
+testbar.x <- as.numeric(table(test_unique_study_particpants))
+names(testbar.x) <- names(table(test_unique_study_particpants))
+
+train_ne <- data.frame(val = trainbar.x, name = names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_ne, "Number of Study Participants", "Number of Embryos", "Train")
+
+#test study participants 65 and 91 used to have 3 embryos, they now have 4; they're the only two that changed. All the others are new
+test_ne <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_ne, "Number of Study Participants", "Number of Embryos", "Test")
+
+gp_train + gp_test
+
+```
+
+#### Embryo Grade at Freezing
+```{r}
+trainbar.x <- as.numeric(table(meta_train$Embryo_grade_at_freezing))
+names(trainbar.x) <- names(table(meta_train$Embryo_grade_at_freezing))
+train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "Embryo grade at freezing", "Train")
+
+testbar.x <- as.numeric(table(meta_test$Embryo_grade_at_freezing))
+names(testbar.x) <- names(table(meta_test$Embryo_grade_at_freezing))
+test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "Embryo grade at freezing", "Test")
+
+gp_train + gp_test
+
+
+```
+
+#### Pregnant
+
+```{r}
+trainbar.x <- as.numeric(table(meta_train$Pregnant))
+names(trainbar.x) <- names(table(meta_train$Pregnant))
+train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "Pregnant Outcome", "Train")
+
+testbar.x <- as.numeric(table(meta_test$Pregnant))
+names(testbar.x) <- names(table(meta_test$Pregnant))
+test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "Pregnant Outcome", "Test")
+
+gp_train + gp_test
+
+```
+
+#### cDNA RT Date
+
+```{r}
+trainbar.x <- as.numeric(table(meta_train$cDNA_RT_Date))
+names(trainbar.x) <- names(table(meta_train$cDNA_RT_Date))
+train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "cDNA Reverse Transcriptase Date", "Train")
+
+testbar.x <- as.numeric(table(meta_test$cDNA_RT_Date))
+names(testbar.x) <- names(table(meta_test$cDNA_RT_Date))
+test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "cDNA Reverse Transcriptase Date", "Test")
+
+gp_train + gp_test
+
+```
+
+#### Library Prep Date
+
+```{r}
+trainbar.x <- as.numeric(table(meta_train$Library_Prep_Date))
+names(trainbar.x) <- names(table(meta_train$Library_Prep_Date))
+train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "Library Prep Date", "Train")
+
+testbar.x <- as.numeric(table(meta_test$Library_Prep_Date))
+names(testbar.x) <- names(table(meta_test$Library_Prep_Date))
+test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "Library Prep Date", "Test")
+
+gp_train + gp_test
+
+```
+
+#### Sequencing Date
+
+```{r}
+trainbar.x <- as.numeric(table(meta_train$Sequencing_Date))
+names(trainbar.x) <- names(table(meta_train$Sequencing_Date))
+train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "Sequencing Date", "Train")
+
+testbar.x <- as.numeric(table(meta_test$Sequencing_Date))
+names(testbar.x) <- names(table(meta_test$Sequencing_Date))
+test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "Sequencing Date", "Test")
+
+gp_train + gp_test
+
+```
+
+
+### Violin plots
+
+#### Oocyte Age
+```{r}
+train_oa <- data.frame(val = meta_train$Oocyte_Age, name = meta_train$set)
+test_oa <- data.frame(val = meta_test$Oocyte_Age, name = meta_test$set)
+df_oa <- rbind(train_oa, test_oa)
+df_oa$name <- factor(df_oa$name, levels=c("train", "test"))
+violin_plot(df_oa, 'Oocyte Age')
+```
+
+#### Uterus Age
+
+```{r}
+train_ua <- data.frame(val = meta_train$Uterus_Age, name = meta_train$set)
+test_ua <- data.frame(val = meta_test$Uterus_Age, name = meta_test$set)
+df_ua <- rbind(train_ua, test_ua)
+df_ua$name <- factor(df_ua$name, levels=c("train", "test"))
+violin_plot(df_ua, "Uterus Age")
+```
+
+#### Sperm Age
+```{r}
+train_sa <- data.frame(val = meta_train$Sperm_Age, name = meta_train$set)
+test_sa <- data.frame(val = meta_test$Sperm_Age, name = meta_test$set)
+df_sa <- rbind(train_sa, test_sa)
+df_sa$name <- factor(df_sa$name, levels=c("train", "test"))
+violin_plot(df_sa, 'Sperm Age')
+```
+
+#### BMI
+```{r}
+train_bmi <- data.frame(val = meta_train$BMI, name=meta_train$set)
+test_bmi <- data.frame(val = meta_test$BMI, name = meta_test$set)
+df_bmi <- rbind(train_bmi, test_bmi)
+df_bmi$name <- factor(df_bmi$name, levels=c("train", "test"))
+violin_plot(df_bmi, "BMI")
+```
+
+#### Lining Thickness MM
+```{r}
+train_lt <- data.frame(val = meta_train$lining_thickness_mm, name = meta_train$set)
+test_lt <- data.frame(val = meta_test$lining_thickness_mm, name = meta_test$set)
+df_lt <- rbind(train_lt, test_lt)
+df_lt$name <- factor(df_lt$name, levels=c("train", "test"))
+violin_plot(df_lt, "Lining Thickness (mm)")
+```
+
+
