@@ -1,0 +1,229 @@
+---
+title: "dif_analysis"
+author: "Kate Weaver"
+date: "12/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE}
+library(limma)
+library(SummarizedExperiment)
+library(rtracklayer)
+library(tidyverse)
+library(data.table)
+library(readxl)
+library(janitor)
+library(ggrepel)
+library(ggthemes)
+library(edgeR)
+library(plotly)
+library(survcomp)
+library(cowplot)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(ggplot2)
+```
+
+```{r set_params}
+qval <- 0.1
+```
+
+importing SummarizedExperiment Data and transforming to raw counts data
+```{r load_data_se}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_allNov2021.Rdata")
+counts <- as.matrix(assays(seAll)$counts)
+for (col in 1:ncol(counts)){
+  colnames(counts)[col]<-strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
+}
+```
+
+```{r, load_andsubsetby_sets}
+#subset to just training data/samples
+embryoID_by_set <- read.csv("~/mccoyLab/collabs/doubleseq_2021/data_split/embryo_bySet_full_kw_20211217.csv", col.names=c("embryoID", "set"))
+train_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "train"]
+train_cols <- which(colnames(counts) %in% train_embryoIDs)
+
+counts <- counts[,train_cols]
+
+ggplot(data.frame(data=colSums(counts)), aes(x=data)) + geom_histogram() + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) #library size is right-skewed, normal distribution, but fairly variable
+message(paste0("nearly ", max(colSums(counts))/min(colSums(counts)), " fold difference between largest and smallest library size for training samples before filtering"))
+```
+
+Therefore, we should probably use voom before limma-trend
+
+```{r load_andsubsetby_gencode}
+#subset to genes with matchind gencode ensembl gene IDs on chr1-22
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+
+gene_table <- gtf[match(rownames(counts), gtf$ensembl_gene_id),]
+gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
+counts <- counts[gene_table$ensembl_gene_id,]
+
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#subsetting meta data to just the training rows            
+remove <- setdiff(rownames(meta), colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+
+#need to sort so name order is the same for setting up design for DESeq experiment
+counts_order <- order(colnames(counts))
+meta_order <- order(rownames(meta))
+
+countdata <- counts[, counts_order]
+coldata <- meta[meta_order, ]
+```
+
+```{r filter_expression}
+#OLDFiltering out counts 0 and 1
+#keep <- rowSums(countdata) > 1
+#countdata <- countdata[keep, ]
+
+#Use more stringent filtering
+dgeFullData <- DGEList(countdata, group=as.factor(coldata$Study_Participant_ID))
+#normalize counts by TMM
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+TMMCounts <- as.matrix(TMMFullData$counts)
+countsCleaned <- TMMCounts[rowSums(TMMCounts >= 6) > (ncol(TMMCounts)* .2),]
+
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+
+#sum(rownames(dgeFullData$counts) == gene_table$ensembl_gene_id) == length(rownames(dgeFullData$counts)) --> TRUE
+
+#creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+cleanedTPMVals <- rawTPMvals[rowSums(rawTPMvals > 0.1) > (ncol(rawTPMvals)*.2),]
+cleanCountsDf <- as.data.frame(countsCleaned)
+cleanTPMdf <- as.data.frame(cleanedTPMVals)
+
+countdata <- cbind(countdata[intersect(rownames(cleanCountsDf), rownames(cleanTPMdf)),])
+```
+
+```{r}
+ggplot(data.frame(data=colSums(countdata)), aes(x=data)) + geom_histogram() + theme_bw() + theme(panel.grid = element_blank(), panel.background = element_blank()) #library size is right-skewed, normal distribution, but fairly variable
+message(paste0("nearly ", max(colSums(countdata))/min(colSums(countdata)), " fold difference between largest and smallest library size for training samples before filtering"))
+```
+Should definitely use voom before limma-trend
+
+```{r, design_matrix}
+#set up design matrix for edgeR, limma, & voom
+#Response variable / outcome of interest later
+Pregnant <- factor(coldata$Pregnant)
+# main covariates to consider
+Batch <- factor(coldata$Sequencing_Date)
+# participant age
+Age_O <- as.numeric(coldata$Oocyte_Age)
+#lining thickness
+lthick <- as.numeric(coldata$lining_thickness_mm)
+#embryo grade at freezing
+egaf <- factor(coldata$Embryo_grade_at_freezing)
+#design0 <- model.matrix( ~ Pregnant + Batch)
+#design1 <- model.matrix( ~ Pregnant + Batch + Age_O)
+#design2 <- model.matrix( ~ Pregnant + Batch + Age_O + lthick)
+design3 <- model.matrix( ~ Pregnant + Batch + Age_O + lthick + egaf)
+
+dge <- edgeR::DGEList(counts = countdata, samples = coldata)
+
+#log counts per million and use of prior.count to damp down the variance of logs of low counts
+logCPM <- edgeR::cpm(dge, log=TRUE, prior.count=3)
+
+#requires statmod package
+
+corfit <- duplicateCorrelation(logCPM, design=design3, ndups=1, block=coldata$Study_Participant_ID) # A slow computation
+message(corfit$consensus.correlation)
+g4 <- boxplot(tanh(corfit$atanh.correlations))
+g4
+
+v <- limma::voom(dge, design3, plot=TRUE, save.plot = TRUE)
+save(v, file="~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/voomOut_trainSPA_withBatch.Rdata")
+
+fit <- lmFit(v, design3, correlation = corfit$consensus)
+fit
+fit <- eBayes(fit)
+res = topTable(fit, n=Inf, sort="p", coef=2)
+
+ggplot(res, aes(x=1, y=adj.P.Val)) + geom_boxplot() + theme_bw() + theme(panel.grid = element_blank(), panel.background = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+ggplot(res, aes(x=1, y=adj.P.Val)) + geom_jitter(width=0.3, height=0) + theme_bw() + theme(panel.grid = element_blank(), panel.background = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+#mapping from ENSEMBL Gene ID to SYMBOL and ENTREZ
+ens.str <- substr(rownames(res), 1, 15)
+edb <- EnsDb.Hsapiens.v86
+res$symbol <- mapIds(edb, keys=ens.str, column="SYMBOL", keytype="GENEID", multiVals="first")
+res$entrez <- mapIds(edb, keys=ens.str, column="ENTREZID", keytype="GENEID", multiVals="first")
+
+res.qval <- subset(res, adj.P.Val<qval) %>% 
+  as.data.frame()
+write.csv(res.qval, file = "~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.qval.csv")
+
+ggplot(res.qval, aes(x=1, y=adj.P.Val)) + geom_jitter(width=0.1, height=0) + theme_bw() + theme(panel.grid = element_blank(), panel.background = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+#exporting all genes
+write.csv(as.data.frame(res), file="~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.all.csv")
+```
+
+```{r plots}
+#plotting volcano plot
+res.qval$diffexpressed <- "NO"
+res.qval$diffexpressed[res.qval$logFC > 2 & res.qval$adj.P.Val < qval] <- "UP"
+res.qval$diffexpressed[res.qval$logFC < -2 & res.qval$adj.P.Val < qval] <- "DOWN"
+
+g0 <-  ggplot(data = res, aes(x=logFC, y=-log10(adj.P.Val))) + geom_point(size=0.5) + theme_classic()
+g0 <- g0 + theme(panel.grid.major = element_line(color="gray70", size=0.3, linetype=3)) + geom_vline(xintercept=c(-2,2), col="green4") + geom_hline(yintercept=-log10(qval), col="green4")
+g0
+
+g <- ggplot(data=res.qval, aes(x=logFC, y=-log10(adj.P.Val), col=diffexpressed)) + geom_point(size=0.5) + theme_classic()
+g <- g + theme(panel.grid.major = element_line(color="gray70", size=0.3, linetype=3)) + geom_vline(xintercept=c(-2,2), col="green4") + geom_hline(yintercept=-log10(qval), col="green4")
+g
+
+g1 <- g + scale_color_manual(values=c("blue", "gray", "red"))
+
+res.qval$delabel <- NA
+res.qval$delabel[res.qval$diffexpressed != "NO"] <- res.qval$symbol[res.qval$diffexpressed != "NO"]
+
+g1 <- ggplot(data = res.qval, aes(x=logFC, y=-log10(adj.P.Val), col=diffexpressed, label=delabel)) +
+  geom_point() +
+  theme_minimal() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_vline(xintercept=c(-0.6, 0.6), col="red") +
+  geom_hline(yintercept=-log10(qval), col="red")
+g1
+
+g1 <- ggplot(data = res, aes(x=logFC, y=-log10(adj.P.Val))) +
+  geom_point() +
+  theme_minimal() +
+  geom_text_repel(data = res[(res$adj.P.Val < 0.4),], aes(x=logFC, y=-log10(adj.P.Val), label = symbol)) +
+  scale_color_manual(values=c("blue", "black", "red")) +
+  geom_vline(xintercept=c(-0.6, 0.6), col="red") +
+  geom_hline(yintercept=-log10(qval), col="red")
+g1
+```
+
+Down-expressed genes are those that are down-expressed in outcomes that lead to implantation
+Up-expressed genes are those that are up-expressed in outcomes that lead to implantation

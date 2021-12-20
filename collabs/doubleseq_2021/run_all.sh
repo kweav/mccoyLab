@@ -12,3 +12,9 @@ bash code/align_and_count/run_star.sh &> star_out.txt
 
 Rscript code/align_and_count/get_counts.R
 
+## locally
+
+#Rmarkdown code/qc/qc.Rmd
+
+#Rmarkdown code/dif_analysis/dif_analysis_limma.Rmd
+
