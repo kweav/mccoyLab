@@ -1,0 +1,130 @@
+---
+title: "Feature Selection"
+author: "Kate Weaver"
+date: "1/10/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load_packages, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(ggplot2)
+```
+
+
+```{r, load_metaandsubsetby_sets}
+#subset to just training data/samples
+embryoID_by_set <- read.csv("~/mccoyLab/collabs/doubleseq_2021/data_split/embryo_bySet_full_kw_20211217.csv", col.names=c("embryoID", "set"))
+train_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "train"]
+
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#subsetting meta data to just the training rows            
+meta <- meta[train_embryoIDs,]
+```
+
+feature selection just based on outcome
+
+```{r}
+df_to_plot <- data.frame(x = colSums(is.na(meta)), variable=colnames(meta))
+df_to_plot$bool_var <- df_to_plot$x > 0
+  
+ggplot(df_to_plot, aes(x = variable, y=1, fill=as.factor(bool_var))) + geom_tile()
+```
+
+```{r}
+whichones <- which(df_to_plot$bool_var == TRUE)
+df_to_plot$variable[whichones]
+```
+
+```{r}
+df_to_plot <- data.frame(x = unlist(lapply(1:ncol(meta), function(x) length(unique(meta[,x])))), variable=colnames(meta))
+df_to_plot$bool_var <- df_to_plot$x >= 2
+  
+ggplot(df_to_plot, aes(x = variable, y=1, fill=as.factor(bool_var))) + geom_tile()
+```
+
+```{r}
+whichones <- which(df_to_plot$bool_var == FALSE)
+df_to_plot$variable[whichones]
+```
+
+select only relevant columns
+```{r}
+columns_to_remove <- c("Ongoing_pregnancy", "Final_outcome",
+                       "Time_to_OPU_hr", "Time_to_stripping_hr", "Time_to_ICSI_hr", "Time_to_Biopsy_hr", "AMH",
+                       "Sildenafil")
+to_remove <- which(colnames(meta) %in% columns_to_remove)
+
+
+meta_covs <- meta[,-to_remove]
+meta_covs$Pregnant=meta_covs$Pregnant==1
+```
+
+```{r, setup_eq, warning=FALSE}
+intercept_only <- glm(Pregnant ~ 1, data = meta_covs, family=binomial)
+all <- glm(Pregnant ~ ., data=meta_covs, family=binomial)
+```
+
+```{r, forward, warning=FALSE}
+forward <- step(intercept_only, direction='forward', scope=formula(all), trace=0)
+forward$anova
+summary(forward)
+```
+
+```{r, backward, warning=FALSE}
+backward <- step(all, direction='backward', scope=formula(all), trace=0)
+backward$anova
+summary(backward)
+```
+
+
+```{r, forward_backward, warning=FALSE}
+both <- step(intercept_only, direction='both', scope=formula(all), trace=0)
+both$anova
+summary(both)
+```
+
+```{r, backward_forward, warning=FALSE}
+both2 <- step(all, direction='both', scope=formula(all), trace=0)
+both2$anova
+summary(both2)
+```
+
+```{r, resid_forward, warning=FALSE}
+fit <- glm(summary(forward)$terms, data=meta_covs, family="binomial")
+plot(residuals(fit) ~ predict(fit))
+```
+
+```{r outlier_forward, warnig = FALSE}
+infl <- influence(fit)$hat
+which.max(infl)
+qqnorm(infl)
+c_d = cooks.distance(fit)
+which.max(c_d)
+qqnorm(c_d)
+```
+
+
+```{r, resid_backward_forward, warning=FALSE}
+fit2 <- glm(summary(both2)$terms, data=meta_covs, family="binomial")
+plot(residuals(fit2) ~ predict(fit2))
+```
+
+```{r, outlier_backward_forward, warning = FALSE}
+infl2 <- influence(fit2)$hat
+which.max(infl2)
+qqnorm(infl2)
+c_d2 = cooks.distance(fit2)
+which.max(c_d2)
+qqnorm(c_d2)
+```
