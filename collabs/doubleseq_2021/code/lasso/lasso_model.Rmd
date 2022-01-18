@@ -21,10 +21,14 @@ library(AnnotationDbi)
 library(EnsDb.Hsapiens.v86)
 library(glmmLasso)
 library(edgeR)
+library(caret)
+library(recipes)
+library(ROCR)
 ```
 
 importing SummarizedExperiment Data and transforming to raw counts data
 ```{r load_data_se}
+#load("~/Dropbox/projects/2022_euploid_lasso/create_summarized_experiment_allNov2021.Rdata")
 load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_allNov2021.Rdata")
 counts <- as.matrix(assays(seAll)$counts)
 for (col in 1:ncol(counts)){
@@ -34,12 +38,14 @@ for (col in 1:ncol(counts)){
 
 ```{r, load_andsubsetby_sets}
 #subset to just training data/samples
+#embryoID_by_set <- read.csv("~/Dropbox/projects/2022_euploid_lasso/embryo_bySet_full_kw_20211217.csv", col.names=c("embryoID", "set"))
 embryoID_by_set <- read.csv("~/mccoyLab/collabs/doubleseq_2021/data_split/embryo_bySet_full_kw_20211217.csv", col.names=c("embryoID", "set"))
 train_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "train"]
 ```
 
 ```{r load_andsubsetby_gencode}
 #subset to genes with matchind gencode ensembl gene IDs on chr1-22
+#file_gencode <- "~/Dropbox/projects/2022_euploid_lasso/gencode.v34.annotation.gtf"
 file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
 
 gtf <- rtracklayer::import(file_gencode) %>% 
@@ -56,42 +62,9 @@ gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
 counts <- counts[gene_table$ensembl_gene_id,]
 ```
 
-```{r load_andmatchby_meta}
-#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
-meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
-  as.data.frame() %>% 
-  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
-  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
-
-#subsetting embryos to include only ones with sequencing data 
-remove <- setdiff(train_embryoIDs, colnames(counts))
-if (length(which(rownames(meta) %in%  remove)) > 0){
-  train_embryoIDs <- train_embryoIDs[-which(train_embryoIDs %in% remove)]
-}
-
-#subsetting meta and counts data to just the training rows            
-meta_train <- meta[train_embryoIDs,]
-counts_train <- as.matrix(t(as.data.frame(t(counts))[train_embryoIDs,])) #57640 genes
-
-#need to sort so name order is the same for setting up design for DESeq experiment
-counts_order <- order(colnames(counts_train))
-meta_order <- order(rownames(meta_train))
-
-countdata <- counts_train[, counts_order]
-coldata <- meta_train[meta_order, ] #107 samples
-```
-
-select countdata genes from any of difexpression analyses
-```{r downselect_genes}
-design0_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_onlyBatch.qval.csv")
-design3_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.qval.csv")
-featselect_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_featselect_withBatch.qval.csv")
-genes_oi <- full_join(full_join(featselect_res, design3_res), design0_res)
-```
-
 ```{r filter_expression}
 #Use more stringent filtering
-dgeFullData <- DGEList(countdata, group=as.factor(coldata$Study_Participant_ID))
+dgeFullData <- DGEList(counts)
 #normalize counts by TMM
 TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
 
@@ -104,37 +77,88 @@ calc_tpm <- function(x, gene.length) {
 
 #creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
 rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
-
-countdata <- cbind(rawTPMvals[genes_oi$X,]) #64 genes
 ```
 
+select genes from any of difexpression analyses
+```{r downselect_genes}
+#design0_res <- read.csv("~/Dropbox/projects/2022_euploid_lasso/results_trainSPA_onlyBatch.qval.csv")
+design0_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_onlyBatch.qval.csv")
+#design3_res <- read.csv("~/Dropbox/projects/2022_euploid_lasso/results_trainSPA_dupCor_withBatch.qval.csv")
+design3_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.qval.csv")
+#featselect_res <- read.csv("~/Dropbox/projects/2022_euploid_lasso/results_trainSPA_featselect_withBatch.qval.csv")
+featselect_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_featselect_withBatch.qval.csv")
+genes_oi <- full_join(full_join(featselect_res, design3_res), design0_res)
+
+counts_train <- as.matrix(t(as.data.frame(t(cbind(rawTPMvals[genes_oi$X,])))[train_embryoIDs,])) #64 genes, 107 samples
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+#meta <- read.csv("~/Dropbox/projects/2022_euploid_lasso/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>%
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#subsetting embryos to include only ones with sequencing data 
+remove <- setdiff(train_embryoIDs, colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  train_embryoIDs <- train_embryoIDs[-which(train_embryoIDs %in% remove)]
+}
+
+#subsetting meta to just the training rows            
+meta_train <- meta[train_embryoIDs,]
+```
 
 select only relevant metadata columns
 ```{r subsetmeta}
 columns_to_remove <- c("Ongoing_pregnancy", "Final_outcome", #irrelevant outcomes
                        "Time_to_OPU_hr", "Time_to_stripping_hr", "Time_to_ICSI_hr", "Time_to_Biopsy_hr", "AMH", #NA values
                        "Sildenafil") #only one factor level
-to_remove <- which(colnames(meta) %in% columns_to_remove)
+to_remove <- which(colnames(meta_train) %in% columns_to_remove)
 
 
-meta_covs <- meta[,-to_remove]
+meta_covs <- meta_train[,-to_remove]
 meta_covs$Pregnant=meta_covs$Pregnant==1
 ```
 
 
 make a full dataframe with sample as row and covariate variable or gene as column
 ```{r onedf}
-df <- merge(meta_covs, as.data.frame(t(countdata)), by=0) %>% `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
+df <- merge(meta_covs, as.data.frame(t(counts_train)), by=0) %>% `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
   as.data.frame() %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
-  dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #107 samples; 117 variables
+  dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric)
 
-non_factor_ind <- c(4:7, 11:14, 16:22, 27, 54:117)
-df_scaled <- df
-df_scaled[,non_factor_ind] <- scale(df_scaled[, non_factor_ind],
-                                    center = TRUE,
-                                    scale=TRUE)
+dim(df)  #107 samples; 117 variables
+```
+
+load test dataframe
+```{r load_test_data}
+
+test_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "test"]
+
+#subsetting embryos to include only ones with sequencing data 
+remove <- setdiff(test_embryoIDs, colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  test_embryoIDs <- test_embryoIDs[-which(test_embryoIDs %in% remove)]
+}
+
+#subsetting meta and counts data to just the training rows            
+meta_test <- meta[test_embryoIDs, -to_remove]
+counts_test <- as.matrix(t(as.data.frame(t(cbind(rawTPMvals[genes_oi$X,])))[test_embryoIDs,])) #64 genes, 36 samples
+
+meta_test$Pregnant=meta_test$Pregnant==1
+
+df_test <- merge(meta_test, as.data.frame(t(counts_test)), by=0) %>% 
+  `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
+  as.data.frame() %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
+  dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) 
+
+dim(df_test) #36 samples; 117 variables
 ```
 
 ```{r, lassomodel}
@@ -143,6 +167,28 @@ fix_form <- reformulate(setdiff(colnames(df), c("Pregnant", "Study_Participant_I
 fix_form
 ```
 
+scale data 
+```{r, scale}
+scale_function <- recipe(~ ., df) %>%
+  step_normalize(all_numeric()) %>%
+  prep()
+
+df_train_scaled <- scale_function %>% 
+  bake(df, all_numeric())
+df_train_nn <- select_if(df, negate(is.numeric))
+df_train_scaled <- cbind(df_train_nn, df_train_scaled)
+
+df_test_scaled <- scale_function %>% 
+  bake(df_test, all_numeric())
+df_test_nn <- select_if(df_test, negate(is.numeric))
+df_test_scaled <- cbind(df_test_nn, df_test_scaled)
+
+
+
+```
+
+
+had to copy formula from above and add the as.factor's to each of the categorical predictor variables :(
 ```{r, lassomodel_pt2, warning=FALSE}
 lambda <- seq(500, 0, by = -5)
 bic_vec <- rep(Inf, length(lambda))
@@ -207,7 +253,7 @@ for(j in 1:length(lambda)){
                                   ENSG00000235275.3 + ENSG00000120875.9 + ENSG00000160570.14 + 
                                   ENSG00000160570.14.1 + ENSG00000054965.10, 
                             rnd = rnd_form,
-                            data = df_scaled,
+                            data = df_train_scaled,
                             lambda = lambda[j],
                             family = binomial(),
                             switch.NR = FALSE,
@@ -225,54 +271,62 @@ lambda[min_ind]
 bic_vec[min_ind]
 ```
 
-```{r unscale_coeffs}
-sds <- sqrt(diag(cov(df[, non_factor_ind])))
-sd_table <- data.frame(1/sds)
-sd_table <- rbind(data.frame("X1.sds" = 1, row.names="(Intercept)"), sd_table)
-unscaled_coeffs <- coef(opt_m)[rownames(sd_table)] * sd_table %>% `colnames<-`("estimate")
-non_factor_rows <- which(names(coef(opt_m)) %in% rownames(sd_table))
-all_coeffs <- rbind(unscaled_coeffs, data.frame("estimate" =coef(opt_m)[-non_factor_rows], row.names=names(coef(opt_m)[-non_factor_rows]))) #11 non-zero coefficient variables including intercept
+```{r, predict_test}
+
+df_test_scaled$pred_implant_prob <- predict(opt_m, newdata=df_test_scaled)
 ```
 
-```{r load_test_data}
+```{r visualizations}
+conf_mat <- caret::confusionMatrix(data = as.factor(df_test_scaled$pred_implant_prob > 0.5), 
+                reference = as.factor(df_test_scaled$Pregnant == 1))
+conf_mat
+conf_mat_df <- data.frame(conf_mat$table)
+conf_mat_df$relfreq <- conf_mat_df$Freq/sum(conf_mat_df$Freq)
+cm_plt <- ggplot(conf_mat_df, aes(x = Reference, y = Prediction, fill = relfreq)) + 
+          geom_tile() +
+          geom_text(aes(label = Freq), vjust = .5, fontface  = "bold", alpha = 1) +
+          theme_bw() +
+          xlim(rev(levels(conf_mat_df$Reference))) + ggtitle("Confusion Matrix: Implantation Success")
+cm_plt
 
-test_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "test"]
-
-#subsetting embryos to include only ones with sequencing data 
-remove <- setdiff(test_embryoIDs, colnames(counts))
-if (length(which(rownames(meta) %in%  remove)) > 0){
-  test_embryoIDs <- test_embryoIDs[-which(test_embryoIDs %in% remove)]
-}
-
-#subsetting meta and counts data to just the training rows            
-meta_test <- meta[test_embryoIDs,]
-counts_test <- as.matrix(t(as.data.frame(t(cbind(rawTPMvals[genes_oi$X,])))[test_embryoIDs,])) #64 genes, 36 samples
-
-#need to sort so name order is the same for setting up design for DESeq experiment
-counts_order <- order(colnames(counts_test))
-meta_order <- order(rownames(meta_test))
-
-counts_test <- counts_test[, counts_order]
-meta_test <- meta_test[meta_order, -to_remove]
-meta_test$Pregnant=meta_test$Pregnant==1
-
-df_test <- merge(meta_test, as.data.frame(t(counts_test)), by=0) %>% 
-  `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
-  as.data.frame() %>%
-  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
-  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
-  dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #36 samples; 117 variables
+pred <- prediction(df_test_scaled$pred_implant_prob, as.factor(df_test_scaled$Pregnant == 1))    
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+df_plot <- data.frame(Curve=1, 
+                 FalsePositive=c(perf@x.values[[1]]),
+                 TruePositive=c(perf@y.values[[1]]))
+plt <- ggplot(df_plot, aes(x=FalsePositive, y=TruePositive, color=as.factor(Curve))) + geom_line() + geom_abline(mapping = NULL, 0,1, linetype=3) + xlab("False Positive Rate") + ylab("True Positive Rate") +ggtitle("ROC Curve: Implantation Success") + theme_bw() + theme(legend.position = "none") + theme(panel.background = element_blank(), panel.grid = element_blank())
+plt
+auc <- performance(pred, "auc")
+auc@y.values[[1]]
 ```
 
-what to do with the training data being scaled, but the test data not being scaled?
+### plot for training data too
 
-any glm `predict()` function gives the following error, no matter what I try.
-> Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
-  contrasts can be applied only to factors with 2 or more levels
-
-glmmLasso predict function isn't found somehow
-
-```{r predict_test_data, eval=FALSE}
-predict.glmmLasso(opt_m, newdata=df_test)
+```{r predict_train}
+df_train_scaled$pred_implant_prob <- predict(opt_m, newdata=df_train_scaled)
 ```
 
+```{r visualizations_train}
+conf_mat_train <- caret::confusionMatrix(data = as.factor(df_train_scaled$pred_implant_prob > 0.5), 
+                reference = as.factor(df_train_scaled$Pregnant == 1))
+conf_mat_train
+conf_mat_train_df <- data.frame(conf_mat_train$table)
+conf_mat_train_df$relfreq <- conf_mat_train_df$Freq/sum(conf_mat_train_df$Freq)
+cm_train_plt <- ggplot(conf_mat_train_df, aes(x = Reference, y = Prediction, fill = relfreq)) + 
+          geom_tile() +
+          geom_text(aes(label = Freq), vjust = .5, fontface  = "bold", alpha = 1) +
+          theme_bw() +
+          xlim(rev(levels(conf_mat_train_df$Reference))) + ggtitle("Confusion Matrix: Implantation Success -- Training Data")
+cm_train_plt
+
+pred_train <- prediction(df_train_scaled$pred_implant_prob, as.factor(df_train_scaled$Pregnant == 1))    
+perf_train <- performance(pred_train, measure = "tpr", x.measure = "fpr")
+df_plot_train <- data.frame(Curve=1, 
+                 FalsePositive=c(perf_train@x.values[[1]]),
+                 TruePositive=c(perf_train@y.values[[1]]))
+plt_train <- ggplot(df_plot_train, aes(x=FalsePositive, y=TruePositive, color=as.factor(Curve))) + geom_line() + geom_abline(mapping = NULL, 0,1, linetype=3) + xlab("False Positive Rate") + ylab("True Positive Rate") +ggtitle("ROC Curve: Implantation Success -- Training Data") + theme_bw() + theme(legend.position = "none") + theme(panel.background = element_blank(), panel.grid = element_blank())
+plt_train
+auc_train <- performance(pred_train, "auc")
+auc_train@y.values[[1]]
+```
+We're likely under regularizing then
