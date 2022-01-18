@@ -19,7 +19,6 @@ library(janitor)
 library(ggplot2)
 library(AnnotationDbi)
 library(EnsDb.Hsapiens.v86)
-library(glmnet)
 library(glmmLasso)
 library(edgeR)
 ```
@@ -82,13 +81,19 @@ countdata <- counts_train[, counts_order]
 coldata <- meta_train[meta_order, ] #107 samples
 ```
 
+select countdata genes from any of difexpression analyses
+```{r downselect_genes}
+design0_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_onlyBatch.qval.csv")
+design3_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.qval.csv")
+featselect_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_featselect_withBatch.qval.csv")
+genes_oi <- full_join(full_join(featselect_res, design3_res), design0_res)
+```
+
 ```{r filter_expression}
 #Use more stringent filtering
 dgeFullData <- DGEList(countdata, group=as.factor(coldata$Study_Participant_ID))
 #normalize counts by TMM
 TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
-TMMCounts <- as.matrix(TMMFullData$counts)
-countsCleaned <- TMMCounts[rowSums(TMMCounts >= 6) > (ncol(TMMCounts)* .2),]
 
 #TPM Calculation
 calc_tpm <- function(x, gene.length) {
@@ -99,19 +104,16 @@ calc_tpm <- function(x, gene.length) {
 
 #creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
 rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
-cleanedTPMVals <- rawTPMvals[rowSums(rawTPMvals > 0.1) > (ncol(rawTPMvals)*.2),]
-cleanCountsDf <- as.data.frame(countsCleaned)
-cleanTPMdf <- as.data.frame(cleanedTPMVals)
 
-countdata <- cbind(cleanTPMdf[rownames(cleanCountsDf),]) #22955 genes
+countdata <- cbind(rawTPMvals[genes_oi$X,]) #64 genes
 ```
 
 
 select only relevant metadata columns
 ```{r subsetmeta}
-columns_to_remove <- c("Ongoing_pregnancy", "Final_outcome",
-                       "Time_to_OPU_hr", "Time_to_stripping_hr", "Time_to_ICSI_hr", "Time_to_Biopsy_hr", "AMH",
-                       "Sildenafil")
+columns_to_remove <- c("Ongoing_pregnancy", "Final_outcome", #irrelevant outcomes
+                       "Time_to_OPU_hr", "Time_to_stripping_hr", "Time_to_ICSI_hr", "Time_to_Biopsy_hr", "AMH", #NA values
+                       "Sildenafil") #only one factor level
 to_remove <- which(colnames(meta) %in% columns_to_remove)
 
 
@@ -119,20 +121,11 @@ meta_covs <- meta[,-to_remove]
 meta_covs$Pregnant=meta_covs$Pregnant==1
 ```
 
-select countdata genes from any of difexpression analyses
-```{r downselect_genes}
-design0_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_onlyBatch.qval.csv")
-design3_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_dupCor_withBatch.qval.csv")
-featselect_res <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_trainSPA_featselect_withBatch.qval.csv")
-genes_oi <- full_join(full_join(featselect_res, design3_res), design0_res)
-countdata <- countdata[genes_oi$X,] #only 64 genes
-```
 
 make a full dataframe with sample as row and covariate variable or gene as column
 ```{r onedf}
-df <- merge(meta_covs, as.data.frame(t(countdata)), by=0) %>%
-  `rownames<-`(df$Row.names) %>% as.data.frame() %>% 
-  dplyr::select(-Row.names) %>%
+df <- merge(meta_covs, as.data.frame(t(countdata)), by=0) %>% `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
+  as.data.frame() %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
   dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #107 samples; 117 variables
@@ -253,7 +246,7 @@ if (length(which(rownames(meta) %in%  remove)) > 0){
 
 #subsetting meta and counts data to just the training rows            
 meta_test <- meta[test_embryoIDs,]
-counts_test <- as.matrix(t(as.data.frame(t(cbind(cleanTPMdf[genes_oi$X,])))[test_embryoIDs,])) #64 genes, 36 samples
+counts_test <- as.matrix(t(as.data.frame(t(cbind(rawTPMvals[genes_oi$X,])))[test_embryoIDs,])) #64 genes, 36 samples
 
 #need to sort so name order is the same for setting up design for DESeq experiment
 counts_order <- order(colnames(counts_test))
@@ -261,10 +254,11 @@ meta_order <- order(rownames(meta_test))
 
 counts_test <- counts_test[, counts_order]
 meta_test <- meta_test[meta_order, -to_remove]
+meta_test$Pregnant=meta_test$Pregnant==1
 
-df_test <- merge(meta_test, as.data.frame(t(counts_test)), by=0) %>%
-  `rownames<-`(df$Row.names) %>% as.data.frame() %>% 
-  dplyr::select(-Row.names) %>%
+df_test <- merge(meta_test, as.data.frame(t(counts_test)), by=0) %>% 
+  `rownames<-`(.[,"Row.names"]) %>% dplyr::select(-Row.names) %>% 
+  as.data.frame() %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
   dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
   dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #36 samples; 117 variables
@@ -278,7 +272,7 @@ any glm `predict()` function gives the following error, no matter what I try.
 
 glmmLasso predict function isn't found somehow
 
-```{r predict_test_data}
+```{r predict_test_data, eval=FALSE}
 predict.glmmLasso(opt_m, newdata=df_test)
 ```
 
