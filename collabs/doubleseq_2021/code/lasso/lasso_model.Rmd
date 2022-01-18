@@ -71,15 +71,15 @@ if (length(which(rownames(meta) %in%  remove)) > 0){
 }
 
 #subsetting meta and counts data to just the training rows            
-meta <- meta[train_embryoIDs,]
-counts <- as.matrix(t(as.data.frame(t(counts))[train_embryoIDs,])) #57640 genes
+meta_train <- meta[train_embryoIDs,]
+counts_train <- as.matrix(t(as.data.frame(t(counts))[train_embryoIDs,])) #57640 genes
 
 #need to sort so name order is the same for setting up design for DESeq experiment
-counts_order <- order(colnames(counts))
-meta_order <- order(rownames(meta))
+counts_order <- order(colnames(counts_train))
+meta_order <- order(rownames(meta_train))
 
-countdata <- counts[, counts_order]
-coldata <- meta[meta_order, ] #107 samples
+countdata <- counts_train[, counts_order]
+coldata <- meta_train[meta_order, ] #107 samples
 ```
 
 ```{r filter_expression}
@@ -133,50 +133,152 @@ make a full dataframe with sample as row and covariate variable or gene as colum
 df <- merge(meta_covs, as.data.frame(t(countdata)), by=0) %>%
   `rownames<-`(df$Row.names) %>% as.data.frame() %>% 
   dplyr::select(-Row.names) %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
   dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #107 samples; 117 variables
+
+non_factor_ind <- c(4:7, 11:14, 16:22, 27, 54:117)
+df_scaled <- df
+df_scaled[,non_factor_ind] <- scale(df_scaled[, non_factor_ind],
+                                    center = TRUE,
+                                    scale=TRUE)
 ```
 
 ```{r, lassomodel}
+rnd_form <- list("Study_Participant_ID"=~1, "cDNA_RT_Date"=~1, "Library_Prep_Date"=~1,"Sequencing_Date"=~1, "Transferring_physician"=~1, "Transfer_catheter_used"=~1)
 fix_form <- reformulate(setdiff(colnames(df), c("Pregnant", "Study_Participant_ID", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date","Transferring_physician", "Transfer_catheter_used")), response="Pregnant")
 fix_form
 ```
 
-```{r, lassomodel_pt2}
-rnd_form <- list("Study_Participant_ID"=~1, "cDNA_RT_Date"=~1, "Library_Prep_Date"=~1,"Sequencing_Date"=~1, "Transferring_physician"=~1, "Transfer_catheter_used"=~1)
-lassomod <- glmmLasso(fix = Pregnant ~ as.factor(AOD) + as.factor(GC) + Oocyte_Age + Uterus_Age + Sperm_Age + BMI + 
-    as.factor(Infertility_type) + as.factor(Previous_pregnancy) + as.factor(Past_surgical_hist) + 
-    FSH_D3 + AFC + LH + E2_Day_2_3 + as.factor(Type_of_trigger) + Total_Gn + 
-    E2_on_trigger + Num_eggs + Num_MII + Num_2PN + Num_Blasts + 
-    TMC + as.factor(Embryo_grade_at_freezing) + as.factor(Interpretation) + as.factor(Natural_cycle) + 
-    as.factor(Medication) + lining_thickness_mm + as.factor(Prednisone) + as.factor(Fragmin) + 
-    as.factor(EG) + as.factor(HCG) + as.factor(IL) + as.factor(GCSF) + as.factor(Metformin) + as.factor(PRP) + as.factor(InfD_SSM_GC) + as.factor(InfD_Egg_factor) + 
-    as.factor(InfD_MF) + as.factor(InfD_Uterine_factor) + as.factor(InfD_TF) + as.factor(InfD_RPL) + as.factor(InfD_RIF) + 
-    as.factor(InfD_Unexplained) + as.factor(PMdH_none) + as.factor(PMdH_vasculitis) + as.factor(PMdH_immune) + 
-   as.factor(PMdH_stress_hormones) + ENSG00000139908.15 + ENSG00000198526.7 + 
-    ENSG00000260876.6 + ENSG00000274979.1 + ENSG00000235523.1 + 
-    ENSG00000158220.14 + ENSG00000197496.6 + ENSG00000143297.19 + 
-    ENSG00000135355.4 + ENSG00000276754.1 + ENSG00000139531.13 + 
-    ENSG00000197651.4 + ENSG00000159882.13 + ENSG00000287462.1 + 
-    ENSG00000285696.1 + ENSG00000243742.5 + ENSG00000163689.20 + 
-    ENSG00000184992.13 + ENSG00000228889.7 + ENSG00000167419.11 + 
-    ENSG00000234277.3 + ENSG00000286963.1 + ENSG00000139438.6 + 
-    ENSG00000251244.2 + ENSG00000170236.16 + ENSG00000164167.12 + 
-    ENSG00000186723.4 + ENSG00000170949.17 + ENSG00000235713.1 + 
-    ENSG00000140265.12 + ENSG00000151445.16 + ENSG00000171243.8 + 
-    ENSG00000214894.6 + ENSG00000164338.10 + ENSG00000186417.14 + 
-    ENSG00000233208.6 + ENSG00000260698.1 + ENSG00000253550.1 + 
-    ENSG00000187720.14 + ENSG00000163746.11 + ENSG00000254180.2 + 
-    ENSG00000198440.9 + ENSG00000279315.1 + ENSG00000118292.9 + 
-    ENSG00000117281.16 + ENSG00000138496.16 + ENSG00000283069.1 + 
-    ENSG00000131059.12 + ENSG00000230299.1 + ENSG00000223522.2 + 
-    ENSG00000206043.7 + ENSG00000280739.3 + ENSG00000164707.15 + 
-    ENSG00000259683.1 + ENSG00000118271.11 + ENSG00000090612.22 + 
-    ENSG00000075239.14 + ENSG00000112984.12 + ENSG00000065308.5 + 
-    ENSG00000235275.3 + ENSG00000120875.9 + ENSG00000160570.14 + 
-    ENSG00000160570.14.1 + ENSG00000054965.10
-, 
-                      rnd = rnd_form,
-                      lambda = 2,
-                      df,
-                      family = binomial(link="logit"))
+```{r, lassomodel_pt2, warning=FALSE}
+lambda <- seq(500, 0, by = -5)
+bic_vec <- rep(Inf, length(lambda))
+m_list <- list()
+
+for(j in 1:length(lambda)){
+  lassomod <- try(glmmLasso(fix = Pregnant ~ 1 + as.factor(AOD) + 
+                                  as.factor(GC) +
+                                  Oocyte_Age + Uterus_Age + Sperm_Age + BMI + 
+                                  as.factor(Infertility_type) +
+                                  as.factor(Previous_pregnancy) +
+                                  as.factor(Past_surgical_hist) + 
+                                  FSH_D3 + AFC + LH + E2_Day_2_3 +
+                                  as.factor(Type_of_trigger) + 
+                                  Total_Gn + 
+                                  E2_on_trigger + Num_eggs + Num_MII + Num_2PN + Num_Blasts + TMC + 
+                                  as.factor(Embryo_grade_at_freezing) +
+                                  as.factor(Interpretation) + 
+                                  as.factor(Natural_cycle) + 
+                                  as.factor(Medication) + 
+                                  lining_thickness_mm + 
+                                  as.factor(Prednisone) + 
+                                  as.factor(Fragmin) + 
+                                  as.factor(EG) + 
+                                  as.factor(HCG) + 
+                                  as.factor(IL) + 
+                                  as.factor(GCSF) + 
+                                  as.factor(Metformin) + 
+                                  as.factor(PRP) + 
+                                  as.factor(InfD_SSM_GC) + 
+                                  as.factor(InfD_Egg_factor) + 
+                                  as.factor(InfD_MF) + 
+                                  as.factor(InfD_Uterine_factor) + 
+                                  as.factor(InfD_TF) + 
+                                  as.factor(InfD_RPL) + 
+                                  as.factor(InfD_RIF) + 
+                                  as.factor(InfD_Unexplained) + 
+                                  as.factor(PMdH_none) + 
+                                  as.factor(PMdH_vasculitis) + 
+                                  as.factor(PMdH_immune) + 
+                                  as.factor(PMdH_stress_hormones) + 
+                                  ENSG00000139908.15 + ENSG00000198526.7 + 
+                                  ENSG00000260876.6 + ENSG00000274979.1 + ENSG00000235523.1 + 
+                                  ENSG00000158220.14 + ENSG00000197496.6 + ENSG00000143297.19 + 
+                                  ENSG00000135355.4 + ENSG00000276754.1 + ENSG00000139531.13 + 
+                                  ENSG00000197651.4 + ENSG00000159882.13 + ENSG00000287462.1 + 
+                                  ENSG00000285696.1 + ENSG00000243742.5 + ENSG00000163689.20 + 
+                                  ENSG00000184992.13 + ENSG00000228889.7 + ENSG00000167419.11 + 
+                                  ENSG00000234277.3 + ENSG00000286963.1 + ENSG00000139438.6 + 
+                                  ENSG00000251244.2 + ENSG00000170236.16 + ENSG00000164167.12 + 
+                                  ENSG00000186723.4 + ENSG00000170949.17 + ENSG00000235713.1 + 
+                                  ENSG00000140265.12 + ENSG00000151445.16 + ENSG00000171243.8 + 
+                                  ENSG00000214894.6 + ENSG00000164338.10 + ENSG00000186417.14 + 
+                                  ENSG00000233208.6 + ENSG00000260698.1 + ENSG00000253550.1 + 
+                                  ENSG00000187720.14 + ENSG00000163746.11 + ENSG00000254180.2 + 
+                                  ENSG00000198440.9 + ENSG00000279315.1 + ENSG00000118292.9 + 
+                                  ENSG00000117281.16 + ENSG00000138496.16 + ENSG00000283069.1 + 
+                                  ENSG00000131059.12 + ENSG00000230299.1 + ENSG00000223522.2 + 
+                                  ENSG00000206043.7 + ENSG00000280739.3 + ENSG00000164707.15 + 
+                                  ENSG00000259683.1 + ENSG00000118271.11 + ENSG00000090612.22 + 
+                                  ENSG00000075239.14 + ENSG00000112984.12 + ENSG00000065308.5 + 
+                                  ENSG00000235275.3 + ENSG00000120875.9 + ENSG00000160570.14 + 
+                                  ENSG00000160570.14.1 + ENSG00000054965.10, 
+                            rnd = rnd_form,
+                            data = df_scaled,
+                            lambda = lambda[j],
+                            family = binomial(),
+                            switch.NR = FALSE,
+                            final.re = TRUE))
+
+  if(class(lassomod)!="try-error"){ 
+    bic_vec[j] <- lassomod$bic
+    m_list[[j]] <- lassomod
+  }
+}
+min_ind <- which.min(bic_vec)
+opt_m <- m_list[[min_ind]]
+summary(opt_m)
+lambda[min_ind]
+bic_vec[min_ind]
 ```
+
+```{r unscale_coeffs}
+sds <- sqrt(diag(cov(df[, non_factor_ind])))
+sd_table <- data.frame(1/sds)
+sd_table <- rbind(data.frame("X1.sds" = 1, row.names="(Intercept)"), sd_table)
+unscaled_coeffs <- coef(opt_m)[rownames(sd_table)] * sd_table %>% `colnames<-`("estimate")
+non_factor_rows <- which(names(coef(opt_m)) %in% rownames(sd_table))
+all_coeffs <- rbind(unscaled_coeffs, data.frame("estimate" =coef(opt_m)[-non_factor_rows], row.names=names(coef(opt_m)[-non_factor_rows]))) #11 non-zero coefficient variables including intercept
+```
+
+```{r load_test_data}
+
+test_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "test"]
+
+#subsetting embryos to include only ones with sequencing data 
+remove <- setdiff(test_embryoIDs, colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  test_embryoIDs <- test_embryoIDs[-which(test_embryoIDs %in% remove)]
+}
+
+#subsetting meta and counts data to just the training rows            
+meta_test <- meta[test_embryoIDs,]
+counts_test <- as.matrix(t(as.data.frame(t(cbind(cleanTPMdf[genes_oi$X,])))[test_embryoIDs,])) #64 genes, 36 samples
+
+#need to sort so name order is the same for setting up design for DESeq experiment
+counts_order <- order(colnames(counts_test))
+meta_order <- order(rownames(meta_test))
+
+counts_test <- counts_test[, counts_order]
+meta_test <- meta_test[meta_order, -to_remove]
+
+df_test <- merge(meta_test, as.data.frame(t(counts_test)), by=0) %>%
+  `rownames<-`(df$Row.names) %>% as.data.frame() %>% 
+  dplyr::select(-Row.names) %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.character)) %>%
+  dplyr::mutate(across(c(Study_Participant_ID, cDNA_RT_Date, Library_Prep_Date, Sequencing_Date, Transferring_physician, Transfer_catheter_used), as.factor)) %>%
+  dplyr::mutate_at(vars(starts_with("ENSG")), as.numeric) #36 samples; 117 variables
+```
+
+what to do with the training data being scaled, but the test data not being scaled?
+
+any glm `predict()` function gives the following error, no matter what I try.
+> Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+  contrasts can be applied only to factors with 2 or more levels
+
+glmmLasso predict function isn't found somehow
+
+```{r predict_test_data}
+predict.glmmLasso(opt_m, newdata=df_test)
+```
+
