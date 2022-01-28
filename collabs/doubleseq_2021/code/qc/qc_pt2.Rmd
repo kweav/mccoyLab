@@ -1,0 +1,180 @@
+---
+title: "QC_pt2"
+author: "Kate Weaver"
+date: "1/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(limma)
+library(SummarizedExperiment)
+library(rtracklayer)
+library(tidyverse)
+library(data.table)
+library(readxl)
+library(janitor)
+library(ggrepel)
+library(ggthemes)
+library(edgeR)
+library(plotly)
+library(survcomp)
+library(cowplot)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(ggplot2)
+```
+
+importing SummarizedExperiment Data and transforming to raw counts data
+```{r load_data_se}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_allNov2021.Rdata")
+counts <- as.matrix(assays(seAll)$counts)
+for (col in 1:ncol(counts)){
+  colnames(counts)[col]<-strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
+}
+```
+
+Subset to just training data/samples
+```{r, load_andsubsetby_sets}
+embryoID_by_set <- read.csv("~/mccoyLab/collabs/doubleseq_2021/data_split/embryo_bySet_full_kw_20211217.csv", col.names=c("embryoID", "set"))
+train_embryoIDs = embryoID_by_set$embryoID[embryoID_by_set$set == "train"]
+train_cols <- which(colnames(counts) %in% train_embryoIDs)
+
+counts <- counts[,train_cols]
+```
+
+Subset to genes known in gencode on chr1-22
+```{r load_andsubsetby_gencode}
+#subset to genes with matching gencode ensembl gene IDs on chr1-22
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+
+gene_table <- gtf[match(rownames(counts), gtf$ensembl_gene_id),]
+gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
+counts <- counts[gene_table$ensembl_gene_id,]
+```
+
+## Redo QCs
+
+original QC
+```{r original_QC_pt1}
+gene_sum = colSums(counts > 0)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+gene_df <- data.frame(sumgenes = gene_sum)
+ggplot(gene_df, aes(x=NULL, y=sumgenes)) + geom_boxplot() + ylab(paste0("Number of genes with\nread counts >0 within ", length(gene_sum), " samples")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r original_QC_pt2}
+sample_sum = rowSums(counts > 0)
+length(sample_sum)
+mean(sample_sum)
+sd(sample_sum)
+sample_df <- data.frame(sumsample = sample_sum)
+ggplot(sample_df, aes(x=NULL, y=sumsample)) + geom_boxplot() + ylab(paste0("Number of samples with\nread counts >0 within ", length(sample_sum), " genes")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+Less stringent QC
+```{r less_stringent_QC_pt1}
+gene_sum = colSums(counts > 1)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+gene_df <- data.frame(sumgenes = gene_sum)
+ggplot(gene_df, aes(x=NULL, y=sumgenes)) + geom_boxplot() + ylab(paste0("Number of genes with\nread counts >0 within ", length(gene_sum), " samples")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r less_stringent_QC_pt2}
+sample_sum = rowSums(counts > 1)
+length(sample_sum)
+mean(sample_sum)
+sd(sample_sum)
+sample_df <- data.frame(sumsample = sample_sum)
+ggplot(sample_df, aes(x=NULL, y=sumsample)) + geom_boxplot() + ylab(paste0("Number of samples with\nread counts >0 within ", length(sample_sum), " genes")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+## Setup continued
+
+import metadata
+
+```{r load_andmatchby_meta}
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#subsetting meta data to just the training rows            
+remove <- setdiff(rownames(meta), colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+
+#need to sort so name order is the same for setting up design for DESeq experiment
+counts_order <- order(colnames(counts))
+meta_order <- order(rownames(meta))
+
+countdata <- counts[, counts_order]
+coldata <- meta[meta_order, ]
+```
+
+
+```{r TPM_function}
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+```
+
+## Redo QCs continued
+
+More stringent QC
+```{r more_stringent_QC_pt1}
+gene_sum = colSums(countdata > 0)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+gene_df <- data.frame(sumgenes = gene_sum)
+ggplot(gene_df, aes(x=NULL, y=sumgenes)) + geom_boxplot() + ylab(paste0("Number of genes with\nread counts >0 within ", length(gene_sum), " samples")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r more_stringent_QC_colsum}
+gene_sum = colSums(countdata)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+gene_df <- data.frame(sumgenes = gene_sum)
+ggplot(gene_df, aes(x=NULL, y=sumgenes)) + geom_boxplot() + ylab(paste0("Sum of gene read counts with\n within ", length(gene_sum), " samples")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r more_stringent_QC_colmean}
+gene_sum = colMeans(countdata)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+gene_df <- data.frame(sumgenes = gene_sum)
+ggplot(gene_df, aes(x=NULL, y=sumgenes)) + geom_boxplot() + ylab(paste0("Mean of gene read counts with\n within ", length(gene_sum), " samples")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+
+```{r more_stringent_QC_pt2}
+sample_sum = rowSums(countdata > 0)
+length(sample_sum)
+mean(sample_sum)
+sd(sample_sum)
+sample_df <- data.frame(sumsample = sample_sum)
+ggplot(sample_df, aes(x=NULL, y=sumsample)) + geom_boxplot() + ylab(paste0("Number of samples with\nread counts >0 within ", length(sample_sum), " genes")) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("") + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+```
+

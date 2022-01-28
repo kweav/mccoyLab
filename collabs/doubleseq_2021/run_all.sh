@@ -16,5 +16,15 @@ Rscript code/align_and_count/get_counts.R
 
 #Rmarkdown code/qc/qc.Rmd
 
+#Rmarkdown code/pca/pca.Rmd
+
+#Rmarkdown code/dif_analysis/dif_analysis_limma_onlybatch.Rmd
+
 #Rmarkdown code/dif_analysis/dif_analysis_limma.Rmd
+
+#Rmarkdown code/feature_selection/feature_selection.Rmd
+
+#Rmarkdown code/dif_analysis/dif_analysis_limma_fsbased.Rmd
+
+#Rmarkdown code/lasso/lasso_model
 
