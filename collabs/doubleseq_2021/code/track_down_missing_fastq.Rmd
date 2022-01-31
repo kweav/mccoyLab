@@ -1,0 +1,66 @@
+---
+title: "which_not_in_counts"
+author: "Kate Weaver"
+date: "1/31/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, warning=FALSE, message=FALSE}
+library(SummarizedExperiment)
+library(tidyverse)
+```
+
+```{r load_data_se}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_allNov2021.Rdata")
+counts <- as.matrix(assays(seAll)$counts)
+for (col in 1:ncol(counts)){
+  colnames(counts)[col]<-strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
+}
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor))
+#subsetting meta data to just the samples with sequencing data            
+remove <- setdiff(rownames(meta), colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+```
+
+
+This file was made by `ls`-ing files in the `~/workzfs-rmccoy22/rmccoy22/create/` directory as such:
+
+```
+ls CReATE_DoubleSeq/211027_A00469_0241_AHMNVGDRXY_Create/*.fastq.gz >> ~/work-rmccoy22/kweave23/create_outcome_pred/list_of_fastq.txt
+ls dec_2020/*.fastq.gz >> ~/work-rmccoy22/kweave23/create_outcome_pred/list_of_fastq.txt
+ls march_2021/*fastq.gz >> ~/work-rmccoy22/kweave23/create_outcome_pred/list_of_fastq.txt
+```
+
+```{r get_helpful_names}
+raw_files <- read.delim("~/taylorLab/lab_notebook/CREATE/list_of_fastq.txt", header=FALSE)
+raw_files <- raw_files %>% 
+  separate(V1, "/", remove=FALSE, fill = "left", extra="merge", into = c("source1", "source2", "fastq")) %>% 
+  separate("fastq", "_", remove=FALSE, extra="drop", into="embryo")
+```
+
+```{r list_of_embryoIDs_with_fastq}
+embryoID_fastq <- unique(raw_files$embryo)
+```
+
+```{r}
+num_not_in_counts <- length(remove)
+num_nic_with_fastq <- sum(unlist(lapply(1:length(remove), function(x) remove[x] %in% embryoID_fastq)))
+
+if (num_nic_with_fastq != num_not_in_counts){
+  message(paste0("We don't have fastqs for ", num_not_in_counts - num_nic_with_fastq, " of ", num_not_in_counts, " embryos."))
+} else {
+  message("We have the fastq files")
+}
+```
