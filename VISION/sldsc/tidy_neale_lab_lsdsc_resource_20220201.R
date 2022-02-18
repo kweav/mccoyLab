@@ -11,4 +11,4 @@ wget_df <- nl_df %>%
   dplyr::select(ldsc_sumstat_wget)
 
 write_csv(description_df, "nl_sumstat_descriptions.csv")
-write.table(wget_df, "nl_sumstat_wgets.csv", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write.table(wget_df, "nl_sumstat_wgets.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)

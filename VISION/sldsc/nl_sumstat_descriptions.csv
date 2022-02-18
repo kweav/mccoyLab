@@ -1,0 +1,650 @@
+phenotype,description,sex
+100001_irnt,Food weight,female
+100001_irnt,Food weight,male
+100002_irnt,Energy,female
+100002_irnt,Energy,male
+100003_irnt,Protein,female
+100003_irnt,Protein,male
+100004_irnt,Fat,female
+100004_irnt,Fat,male
+100005_irnt,Carbohydrate,female
+100005_irnt,Carbohydrate,male
+100006_irnt,Saturated fat,female
+100006_irnt,Saturated fat,male
+100007_irnt,Polyunsaturated fat,female
+100007_irnt,Polyunsaturated fat,male
+100008_irnt,Total sugars,female
+100008_irnt,Total sugars,male
+100009_irnt,Englyst dietary fibre,female
+100009_irnt,Englyst dietary fibre,male
+100011_irnt,Iron,female
+100011_irnt,Iron,male
+100012_irnt,Vitamin B6,female
+100012_irnt,Vitamin B6,male
+100013_irnt,Vitamin B12,female
+100013_irnt,Vitamin B12,male
+100014_irnt,Folate,female
+100014_irnt,Folate,male
+100015_irnt,Vitamin C,female
+100015_irnt,Vitamin C,male
+100016_irnt,Potassium,female
+100016_irnt,Potassium,male
+100017_irnt,Magnesium,female
+100017_irnt,Magnesium,male
+100018_irnt,Retinol,female
+100018_irnt,Retinol,male
+100019_irnt,Carotene,female
+100019_irnt,Carotene,male
+100021_irnt,Vitamin D,female
+100021_irnt,Vitamin D,male
+100023_irnt,Starch,female
+100023_irnt,Starch,male
+100024_irnt,Calcium,female
+100024_irnt,Calcium,male
+100025_irnt,Vitamin E,female
+100025_irnt,Vitamin E,male
+102_irnt,"Pulse rate, automated reading",female
+102_irnt,"Pulse rate, automated reading",male
+12336_irnt,Ventricular rate,female
+12336_irnt,Ventricular rate,male
+12338_irnt,P duration,female
+12338_irnt,P duration,male
+12340_irnt,QRS duration,female
+12340_irnt,QRS duration,male
+129_irnt,Place of birth in UK - north co-ordinate,female
+129_irnt,Place of birth in UK - north co-ordinate,female
+129_irnt,Place of birth in UK - north co-ordinate,male
+129_irnt,Place of birth in UK - north co-ordinate,male
+130_irnt,Place of birth in UK - east co-ordinate,female
+130_irnt,Place of birth in UK - east co-ordinate,female
+130_irnt,Place of birth in UK - east co-ordinate,male
+130_irnt,Place of birth in UK - east co-ordinate,male
+1438_irnt,Bread intake,female
+1438_irnt,Bread intake,male
+1488_irnt,Tea intake,female
+1488_irnt,Tea intake,male
+1807_irnt,Father's age at death,female
+1807_irnt,Father's age at death,male
+189_irnt,Townsend deprivation index at recruitment,female
+189_irnt,Townsend deprivation index at recruitment,male
+20007_irnt,Interpolated Age of participant when cancer first diagnosed,female
+20007_irnt,Interpolated Age of participant when cancer first diagnosed,male
+20015_irnt,Sitting height,female
+20015_irnt,Sitting height,male
+20016_irnt,Fluid intelligence score,female
+20016_irnt,Fluid intelligence score,male
+20019_irnt,Speech-reception-threshold (SRT) estimate (left),female
+20019_irnt,Speech-reception-threshold (SRT) estimate (left),male
+20021_irnt,Speech-reception-threshold (SRT) estimate (right),female
+20021_irnt,Speech-reception-threshold (SRT) estimate (right),male
+20022_irnt,Birth weight,female
+20022_irnt,Birth weight,male
+20023_irnt,Mean time to correctly identify matches,female
+20023_irnt,Mean time to correctly identify matches,male
+20074_irnt,Home location at assessment - east co-ordinate (rounded),female
+20074_irnt,Home location at assessment - east co-ordinate (rounded),male
+20075_irnt,Home location at assessment - north co-ordinate (rounded),female
+20075_irnt,Home location at assessment - north co-ordinate (rounded),male
+20127_irnt,Neuroticism score,female
+20127_irnt,Neuroticism score,male
+20150_irnt,"Forced expiratory volume in 1-second (FEV1), Best measure",female
+20150_irnt,"Forced expiratory volume in 1-second (FEV1), Best measure",male
+20151_irnt,"Forced vital capacity (FVC), Best measure",female
+20151_irnt,"Forced vital capacity (FVC), Best measure",male
+20153_irnt,"Forced expiratory volume in 1-second (FEV1), predicted",female
+20153_irnt,"Forced expiratory volume in 1-second (FEV1), predicted",male
+20154_irnt,"Forced expiratory volume in 1-second (FEV1), predicted percentage",female
+20154_irnt,"Forced expiratory volume in 1-second (FEV1), predicted percentage",male
+20420_irnt,Longest period spent worried or anxious,female
+20420_irnt,Longest period spent worried or anxious,male
+20433_irnt,Age at first episode of depression,female
+20433_irnt,Age at first episode of depression,male
+20434_irnt,Age at last episode of depression,female
+20434_irnt,Age at last episode of depression,male
+20455_irnt,Age when last took cannabis,female
+20455_irnt,Age when last took cannabis,male
+21001_irnt,Body mass index (BMI),female
+21001_irnt,Body mass index (BMI),male
+21002_irnt,Weight,female
+21002_irnt,Weight,male
+21021_irnt,Pulse wave Arterial Stiffness index,female
+21021_irnt,Pulse wave Arterial Stiffness index,male
+2139_irnt,Age first had sexual intercourse,female
+2139_irnt,Age first had sexual intercourse,male
+22146_irnt,Age hayfever or allergic rhinitis diagnosed by doctor,female
+22146_irnt,Age hayfever or allergic rhinitis diagnosed by doctor,male
+22147_irnt,Age asthma diagnosed by doctor,female
+22147_irnt,Age asthma diagnosed by doctor,male
+2217_irnt,Age started wearing glasses or contact lenses,female
+2217_irnt,Age started wearing glasses or contact lenses,male
+22501_irnt,Year ended full time education,female
+22501_irnt,Year ended full time education,male
+22503_irnt,Years of cough on most days,female
+22503_irnt,Years of cough on most days,male
+22507_irnt,Age of stopping smoking,female
+22507_irnt,Age of stopping smoking,male
+22605_irnt,Work hours per week - exact value,female
+22605_irnt,Work hours per week - exact value,male
+22643_irnt,Number of night shifts worked monthly during mixed shift periods,female
+22643_irnt,Number of night shifts worked monthly during mixed shift periods,male
+22644_irnt,Consecutive night shifts during mixed shift periods,female
+22644_irnt,Consecutive night shifts during mixed shift periods,male
+22702_irnt,Home location - east co-ordinate (rounded),female
+22702_irnt,Home location - east co-ordinate (rounded),male
+22704_irnt,Home location - north co-ordinate (rounded),female
+22704_irnt,Home location - north co-ordinate (rounded),male
+23098_irnt,Weight,female
+23098_irnt,Weight,male
+23099_irnt,Body fat percentage,female
+23099_irnt,Body fat percentage,male
+23100_irnt,Whole body fat mass,female
+23100_irnt,Whole body fat mass,male
+23101_irnt,Whole body fat-free mass,female
+23101_irnt,Whole body fat-free mass,male
+23102_irnt,Whole body water mass,female
+23102_irnt,Whole body water mass,male
+23104_irnt,Body mass index (BMI),female
+23104_irnt,Body mass index (BMI),male
+23105_irnt,Basal metabolic rate,female
+23105_irnt,Basal metabolic rate,male
+23106_irnt,Impedance of whole body,female
+23106_irnt,Impedance of whole body,male
+23107_irnt,Impedance of leg (right),female
+23107_irnt,Impedance of leg (right),male
+23108_irnt,Impedance of leg (left),female
+23108_irnt,Impedance of leg (left),male
+23109_irnt,Impedance of arm (right),female
+23109_irnt,Impedance of arm (right),male
+23110_irnt,Impedance of arm (left),female
+23110_irnt,Impedance of arm (left),male
+23111_irnt,Leg fat percentage (right),female
+23111_irnt,Leg fat percentage (right),male
+23112_irnt,Leg fat mass (right),female
+23112_irnt,Leg fat mass (right),male
+23113_irnt,Leg fat-free mass (right),female
+23113_irnt,Leg fat-free mass (right),male
+23114_irnt,Leg predicted mass (right),female
+23114_irnt,Leg predicted mass (right),male
+23115_irnt,Leg fat percentage (left),female
+23115_irnt,Leg fat percentage (left),male
+23116_irnt,Leg fat mass (left),female
+23116_irnt,Leg fat mass (left),male
+23117_irnt,Leg fat-free mass (left),female
+23117_irnt,Leg fat-free mass (left),male
+23118_irnt,Leg predicted mass (left),female
+23118_irnt,Leg predicted mass (left),male
+23119_irnt,Arm fat percentage (right),female
+23119_irnt,Arm fat percentage (right),male
+23120_irnt,Arm fat mass (right),female
+23120_irnt,Arm fat mass (right),male
+23121_irnt,Arm fat-free mass (right),female
+23121_irnt,Arm fat-free mass (right),male
+23122_irnt,Arm predicted mass (right),female
+23122_irnt,Arm predicted mass (right),male
+23123_irnt,Arm fat percentage (left),female
+23123_irnt,Arm fat percentage (left),male
+23124_irnt,Arm fat mass (left),female
+23124_irnt,Arm fat mass (left),male
+23125_irnt,Arm fat-free mass (left),female
+23125_irnt,Arm fat-free mass (left),male
+23126_irnt,Arm predicted mass (left),female
+23126_irnt,Arm predicted mass (left),male
+23127_irnt,Trunk fat percentage,female
+23127_irnt,Trunk fat percentage,male
+23128_irnt,Trunk fat mass,female
+23128_irnt,Trunk fat mass,male
+23129_irnt,Trunk fat-free mass,female
+23129_irnt,Trunk fat-free mass,male
+23130_irnt,Trunk predicted mass,female
+23130_irnt,Trunk predicted mass,male
+24003_irnt,Nitrogen dioxide air pollution; 2010,female
+24003_irnt,Nitrogen dioxide air pollution; 2010,male
+24004_irnt,Nitrogen oxides air pollution; 2010,female
+24004_irnt,Nitrogen oxides air pollution; 2010,male
+24005_irnt,Particulate matter air pollution (pm10); 2010,female
+24005_irnt,Particulate matter air pollution (pm10); 2010,male
+24006_irnt,Particulate matter air pollution (pm2.5); 2010,female
+24006_irnt,Particulate matter air pollution (pm2.5); 2010,male
+24007_irnt,Particulate matter air pollution (pm2.5) absorbance; 2010,female
+24007_irnt,Particulate matter air pollution (pm2.5) absorbance; 2010,male
+24008_irnt,Particulate matter air pollution 2.5-10um; 2010,female
+24008_irnt,Particulate matter air pollution 2.5-10um; 2010,male
+24010_irnt,Inverse distance to the nearest road,female
+24010_irnt,Inverse distance to the nearest road,male
+24011_irnt,Traffic intensity on the nearest major road,female
+24011_irnt,Traffic intensity on the nearest major road,male
+24012_irnt,Inverse distance to the nearest major road,female
+24012_irnt,Inverse distance to the nearest major road,male
+24016_irnt,Nitrogen dioxide air pollution; 2005,female
+24016_irnt,Nitrogen dioxide air pollution; 2005,male
+24017_irnt,Nitrogen dioxide air pollution; 2006,female
+24017_irnt,Nitrogen dioxide air pollution; 2006,male
+24018_irnt,Nitrogen dioxide air pollution; 2007,female
+24018_irnt,Nitrogen dioxide air pollution; 2007,male
+24019_irnt,Particulate matter air pollution (pm10); 2007,female
+24019_irnt,Particulate matter air pollution (pm10); 2007,male
+24020_irnt,Average daytime sound level of noise pollution,female
+24020_irnt,Average daytime sound level of noise pollution,male
+24021_irnt,Average evening sound level of noise pollution,female
+24021_irnt,Average evening sound level of noise pollution,male
+24022_irnt,Average night-time sound level of noise pollution,female
+24022_irnt,Average night-time sound level of noise pollution,male
+24023_irnt,Average 16-hour sound level of noise pollution,female
+24023_irnt,Average 16-hour sound level of noise pollution,male
+24024_irnt,Average 24-hour sound level of noise pollution,female
+24024_irnt,Average 24-hour sound level of noise pollution,male
+2867_irnt,Age started smoking in former smokers,female
+2867_irnt,Age started smoking in former smokers,male
+2966_irnt,Age high blood pressure diagnosed,female
+2966_irnt,Age high blood pressure diagnosed,male
+2976_irnt,Age diabetes diagnosed,female
+2976_irnt,Age diabetes diagnosed,male
+30000_irnt,White blood cell (leukocyte) count,female
+30000_irnt,White blood cell (leukocyte) count,male
+30010_irnt,Red blood cell (erythrocyte) count,female
+30010_irnt,Red blood cell (erythrocyte) count,male
+30020_irnt,Haemoglobin concentration,female
+30020_irnt,Haemoglobin concentration,male
+30030_irnt,Haematocrit percentage,female
+30030_irnt,Haematocrit percentage,male
+30040_irnt,Mean corpuscular volume,female
+30040_irnt,Mean corpuscular volume,male
+30050_irnt,Mean corpuscular haemoglobin,female
+30050_irnt,Mean corpuscular haemoglobin,male
+30060_irnt,Mean corpuscular haemoglobin concentration,female
+30060_irnt,Mean corpuscular haemoglobin concentration,male
+30070_irnt,Red blood cell (erythrocyte) distribution width,female
+30070_irnt,Red blood cell (erythrocyte) distribution width,male
+30080_irnt,Platelet count,female
+30080_irnt,Platelet count,male
+30090_irnt,Platelet crit,female
+30090_irnt,Platelet crit,male
+30100_irnt,Mean platelet (thrombocyte) volume,female
+30100_irnt,Mean platelet (thrombocyte) volume,male
+30110_irnt,Platelet distribution width,female
+30110_irnt,Platelet distribution width,male
+30120_irnt,Lymphocyte count,female
+30120_irnt,Lymphocyte count,male
+30130_irnt,Monocyte count,female
+30130_irnt,Monocyte count,male
+30140_irnt,Neutrophill count,female
+30140_irnt,Neutrophill count,male
+30180_irnt,Lymphocyte percentage,female
+30180_irnt,Lymphocyte percentage,male
+30190_irnt,Monocyte percentage,female
+30190_irnt,Monocyte percentage,male
+30200_irnt,Neutrophill percentage,female
+30200_irnt,Neutrophill percentage,male
+30210_irnt,Eosinophill percentage,female
+30210_irnt,Eosinophill percentage,male
+30220_irnt,Basophill percentage,female
+30220_irnt,Basophill percentage,male
+30240_irnt,Reticulocyte percentage,female
+30240_irnt,Reticulocyte percentage,male
+30250_irnt,Reticulocyte count,female
+30250_irnt,Reticulocyte count,male
+30260_irnt,Mean reticulocyte volume,female
+30260_irnt,Mean reticulocyte volume,male
+30270_irnt,Mean sphered cell volume,female
+30270_irnt,Mean sphered cell volume,male
+30280_irnt,Immature reticulocyte fraction,female
+30280_irnt,Immature reticulocyte fraction,male
+30290_irnt,High light scatter reticulocyte percentage,female
+30290_irnt,High light scatter reticulocyte percentage,male
+30300_irnt,High light scatter reticulocyte count,female
+30300_irnt,High light scatter reticulocyte count,male
+30500_irnt,Microalbumin in urine,female
+30500_irnt,Microalbumin in urine,male
+30510_irnt,Creatinine (enzymatic) in urine,female
+30510_irnt,Creatinine (enzymatic) in urine,male
+30520_irnt,Potassium in urine,female
+30520_irnt,Potassium in urine,male
+30530_irnt,Sodium in urine,female
+30530_irnt,Sodium in urine,male
+30600_irnt,Albumin (g/L),female
+30600_irnt,Albumin (g/L),female
+30600_irnt,Albumin (g/L),male
+30600_irnt,Albumin (g/L),male
+30610_irnt,Alkaline phosphatase (U/L),female
+30610_irnt,Alkaline phosphatase (U/L),female
+30610_irnt,Alkaline phosphatase (U/L),male
+30610_irnt,Alkaline phosphatase (U/L),male
+3062_irnt,Forced vital capacity (FVC),female
+3062_irnt,Forced vital capacity (FVC),male
+30620_irnt,Alanine aminotransferase (U/L),female
+30620_irnt,Alanine aminotransferase (U/L),female
+30620_irnt,Alanine aminotransferase (U/L),male
+30620_irnt,Alanine aminotransferase (U/L),male
+3063_irnt,Forced expiratory volume in 1-second (FEV1),female
+3063_irnt,Forced expiratory volume in 1-second (FEV1),male
+30630_irnt,Apoliprotein A (g/L),female
+30630_irnt,Apoliprotein A (g/L),female
+30630_irnt,Apoliprotein A (g/L),male
+30630_irnt,Apoliprotein A (g/L),male
+3064_irnt,Peak expiratory flow (PEF),female
+3064_irnt,Peak expiratory flow (PEF),male
+30640_irnt,Apoliprotein B (g/L),female
+30640_irnt,Apoliprotein B (g/L),female
+30640_irnt,Apoliprotein B (g/L),male
+30640_irnt,Apoliprotein B (g/L),male
+30650_irnt,Aspartate aminotransferase (U/L),female
+30650_irnt,Aspartate aminotransferase (U/L),female
+30650_irnt,Aspartate aminotransferase (U/L),male
+30650_irnt,Aspartate aminotransferase (U/L),male
+30660_irnt,Direct bilirubin (umol/L),female
+30660_irnt,Direct bilirubin (umol/L),female
+30660_irnt,Direct bilirubin (umol/L),male
+30660_irnt,Direct bilirubin (umol/L),male
+30670_irnt,Urea (mmol/L),female
+30670_irnt,Urea (mmol/L),female
+30670_irnt,Urea (mmol/L),male
+30670_irnt,Urea (mmol/L),male
+30680_irnt,Calcium (mmol/L),female
+30680_irnt,Calcium (mmol/L),female
+30680_irnt,Calcium (mmol/L),male
+30680_irnt,Calcium (mmol/L),male
+30690_irnt,Cholesterol (mmol/L),female
+30690_irnt,Cholesterol (mmol/L),female
+30690_irnt,Cholesterol (mmol/L),male
+30690_irnt,Cholesterol (mmol/L),male
+30700_irnt,Creatinine (umol/L),female
+30700_irnt,Creatinine (umol/L),female
+30700_irnt,Creatinine (umol/L),male
+30700_irnt,Creatinine (umol/L),male
+30710_irnt,C-reactive protein (mg/L),female
+30710_irnt,C-reactive protein (mg/L),female
+30710_irnt,C-reactive protein (mg/L),male
+30710_irnt,C-reactive protein (mg/L),male
+30720_irnt,Cystatin C (mg/L),female
+30720_irnt,Cystatin C (mg/L),female
+30720_irnt,Cystatin C (mg/L),male
+30720_irnt,Cystatin C (mg/L),male
+30730_irnt,Gamma glutamyltransferase (U/L),female
+30730_irnt,Gamma glutamyltransferase (U/L),female
+30730_irnt,Gamma glutamyltransferase (U/L),male
+30730_irnt,Gamma glutamyltransferase (U/L),male
+30740_irnt,Glucose (mmol/L),female
+30740_irnt,Glucose (mmol/L),female
+30740_irnt,Glucose (mmol/L),male
+30740_irnt,Glucose (mmol/L),male
+30750_irnt,Glycated haemoglobin (mmol/mol),female
+30750_irnt,Glycated haemoglobin (mmol/mol),female
+30750_irnt,Glycated haemoglobin (mmol/mol),male
+30750_irnt,Glycated haemoglobin (mmol/mol),male
+30760_irnt,HDL cholesterol (mmol/L),female
+30760_irnt,HDL cholesterol (mmol/L),female
+30760_irnt,HDL cholesterol (mmol/L),male
+30760_irnt,HDL cholesterol (mmol/L),male
+30770_irnt,IGF-1 (nmol/L),female
+30770_irnt,IGF-1 (nmol/L),female
+30770_irnt,IGF-1 (nmol/L),male
+30770_irnt,IGF-1 (nmol/L),male
+30780_irnt,LDL direct (mmol/L),female
+30780_irnt,LDL direct (mmol/L),female
+30780_irnt,LDL direct (mmol/L),male
+30780_irnt,LDL direct (mmol/L),male
+30790_irnt,Lipoprotein A (nmol/L),female
+30790_irnt,Lipoprotein A (nmol/L),female
+30790_irnt,Lipoprotein A (nmol/L),male
+30790_irnt,Lipoprotein A (nmol/L),male
+30800_irnt,Oestradiol (pmol/L),female
+30800_irnt,Oestradiol (pmol/L),female
+30800_irnt,Oestradiol (pmol/L),male
+30800_irnt,Oestradiol (pmol/L),male
+30810_irnt,Phosphate (mmol/L),female
+30810_irnt,Phosphate (mmol/L),female
+30810_irnt,Phosphate (mmol/L),male
+30810_irnt,Phosphate (mmol/L),male
+30820_irnt,Rheumatoid factor (IU/ml),female
+30820_irnt,Rheumatoid factor (IU/ml),female
+30820_irnt,Rheumatoid factor (IU/ml),male
+30820_irnt,Rheumatoid factor (IU/ml),male
+30830_irnt,SHBG (nmol/L),female
+30830_irnt,SHBG (nmol/L),female
+30830_irnt,SHBG (nmol/L),male
+30830_irnt,SHBG (nmol/L),male
+30840_irnt,Total bilirubin (umol/L),female
+30840_irnt,Total bilirubin (umol/L),female
+30840_irnt,Total bilirubin (umol/L),male
+30840_irnt,Total bilirubin (umol/L),male
+30850_irnt,Testosterone (nmol/L),female
+30850_irnt,Testosterone (nmol/L),female
+30850_irnt,Testosterone (nmol/L),male
+30850_irnt,Testosterone (nmol/L),male
+30860_irnt,Total protein (g/L),female
+30860_irnt,Total protein (g/L),female
+30860_irnt,Total protein (g/L),male
+30860_irnt,Total protein (g/L),male
+30870_irnt,Triglycerides (mmol/L),female
+30870_irnt,Triglycerides (mmol/L),female
+30870_irnt,Triglycerides (mmol/L),male
+30870_irnt,Triglycerides (mmol/L),male
+30880_irnt,Urate (umol/L),female
+30880_irnt,Urate (umol/L),female
+30880_irnt,Urate (umol/L),male
+30880_irnt,Urate (umol/L),male
+30890_irnt,Vitamin D (nmol/L),female
+30890_irnt,Vitamin D (nmol/L),female
+30890_irnt,Vitamin D (nmol/L),male
+30890_irnt,Vitamin D (nmol/L),male
+30897_irnt,Estimated sample dilution factor (factor),female
+30897_irnt,Estimated sample dilution factor (factor),female
+30897_irnt,Estimated sample dilution factor (factor),male
+30897_irnt,Estimated sample dilution factor (factor),male
+3143_irnt,Ankle spacing width,female
+3143_irnt,Ankle spacing width,male
+3144_irnt,"Heel Broadband ultrasound attenuation, direct entry",female
+3144_irnt,"Heel Broadband ultrasound attenuation, direct entry",male
+3147_irnt,"Heel quantitative ultrasound index (QUI), direct entry",female
+3147_irnt,"Heel quantitative ultrasound index (QUI), direct entry",male
+3148_irnt,Heel bone mineral density (BMD),female
+3148_irnt,Heel bone mineral density (BMD),male
+3436_irnt,Age started smoking in current smokers,female
+3436_irnt,Age started smoking in current smokers,male
+3526_irnt,Mother's age at death,female
+3526_irnt,Mother's age at death,male
+3627_irnt,Age angina diagnosed,male
+3761_irnt,"Age hay fever, rhinitis or eczema diagnosed",female
+3761_irnt,"Age hay fever, rhinitis or eczema diagnosed",male
+3786_irnt,Age asthma diagnosed,female
+3786_irnt,Age asthma diagnosed,male
+3894_irnt,Age heart attack diagnosed,male
+399_irnt,Number of incorrect matches in round,female
+399_irnt,Number of incorrect matches in round,male
+400_irnt,Time to complete round,female
+400_irnt,Time to complete round,male
+40007_irnt,Age at death,male
+404_irnt,Duration to first press of snap-button in each round,female
+404_irnt,Duration to first press of snap-button in each round,male
+4079_irnt,"Diastolic blood pressure, automated reading",female
+4079_irnt,"Diastolic blood pressure, automated reading",male
+4080_irnt,"Systolic blood pressure, automated reading",female
+4080_irnt,"Systolic blood pressure, automated reading",male
+4100_irnt,Ankle spacing width (left),female
+4100_irnt,Ankle spacing width (left),male
+4101_irnt,Heel broadband ultrasound attenuation (left),female
+4101_irnt,Heel broadband ultrasound attenuation (left),male
+4104_irnt,"Heel quantitative ultrasound index (QUI), direct entry (left)",female
+4104_irnt,"Heel quantitative ultrasound index (QUI), direct entry (left)",male
+4105_irnt,Heel bone mineral density (BMD) (left),female
+4105_irnt,Heel bone mineral density (BMD) (left),male
+4106_irnt,"Heel bone mineral density (BMD) T-score, automated (left)",female
+4106_irnt,"Heel bone mineral density (BMD) T-score, automated (left)",male
+4119_irnt,Ankle spacing width (right),female
+4119_irnt,Ankle spacing width (right),male
+4120_irnt,Heel broadband ultrasound attenuation (right),female
+4120_irnt,Heel broadband ultrasound attenuation (right),male
+4123_irnt,"Heel quantitative ultrasound index (QUI), direct entry (right)",female
+4123_irnt,"Heel quantitative ultrasound index (QUI), direct entry (right)",male
+4124_irnt,Heel bone mineral density (BMD) (right),female
+4124_irnt,Heel bone mineral density (BMD) (right),male
+4125_irnt,"Heel bone mineral density (BMD) T-score, automated (right)",female
+4125_irnt,"Heel bone mineral density (BMD) T-score, automated (right)",male
+4194_irnt,Pulse rate,female
+4194_irnt,Pulse rate,male
+4195_irnt,Pulse wave reflection index,female
+4195_irnt,Pulse wave reflection index,male
+4196_irnt,Pulse wave peak to peak time,female
+4196_irnt,Pulse wave peak to peak time,male
+4230_irnt,Signal-to-noise-ratio (SNR) of triplet (left),female
+4230_irnt,Signal-to-noise-ratio (SNR) of triplet (left),male
+4233_irnt,"Mean signal-to-noise ratio (SNR), (left)",female
+4233_irnt,"Mean signal-to-noise ratio (SNR), (left)",male
+4241_irnt,Signal-to-noise-ratio (SNR) of triplet (right),female
+4241_irnt,Signal-to-noise-ratio (SNR) of triplet (right),male
+4244_irnt,"Mean signal-to-noise ratio (SNR), (right)",female
+4244_irnt,"Mean signal-to-noise ratio (SNR), (right)",male
+4288_irnt,Time to answer,female
+4288_irnt,Time to answer,male
+4290_irnt,Duration screen displayed,female
+4290_irnt,Duration screen displayed,male
+46_irnt,Hand grip strength (left),female
+46_irnt,Hand grip strength (left),male
+4609_irnt,Longest period of depression,female
+4609_irnt,Longest period of depression,male
+47_irnt,Hand grip strength (right),female
+47_irnt,Hand grip strength (right),male
+48_irnt,Waist circumference,female
+48_irnt,Waist circumference,male
+49_irnt,Hip circumference,female
+49_irnt,Hip circumference,male
+50_irnt,Standing height,female
+50_irnt,Standing height,male
+5084_irnt,Spherical power (right),female
+5084_irnt,Spherical power (right),male
+5085_irnt,Spherical power (left),female
+5085_irnt,Spherical power (left),male
+5086_irnt,Cylindrical power (left),female
+5086_irnt,Cylindrical power (left),male
+5087_irnt,Cylindrical power (right),female
+5087_irnt,Cylindrical power (right),male
+5088_irnt,Astigmatism angle (right),female
+5088_irnt,Astigmatism angle (right),male
+5089_irnt,Astigmatism angle (left),female
+5089_irnt,Astigmatism angle (left),male
+5096_irnt,3mm weak meridian (left),female
+5096_irnt,3mm weak meridian (left),male
+5097_irnt,6mm weak meridian (left),female
+5097_irnt,6mm weak meridian (left),male
+5098_irnt,6mm weak meridian (right),female
+5098_irnt,6mm weak meridian (right),male
+5099_irnt,3mm weak meridian (right),female
+5099_irnt,3mm weak meridian (right),male
+5100_irnt,3mm weak meridian angle (right),female
+5100_irnt,3mm weak meridian angle (right),male
+5101_irnt,6mm weak meridian angle (right),female
+5101_irnt,6mm weak meridian angle (right),male
+5102_irnt,6mm weak meridian angle (left),female
+5102_irnt,6mm weak meridian angle (left),male
+5103_irnt,3mm weak meridian angle (left),female
+5103_irnt,3mm weak meridian angle (left),male
+5104_irnt,3mm strong meridian angle (left),female
+5104_irnt,3mm strong meridian angle (left),male
+5105_irnt,6mm strong meridian angle (left),female
+5105_irnt,6mm strong meridian angle (left),male
+5106_irnt,6mm strong meridian angle (right),female
+5106_irnt,6mm strong meridian angle (right),male
+5107_irnt,3mm strong meridian angle (right),female
+5107_irnt,3mm strong meridian angle (right),male
+5108_irnt,3mm asymmetry angle (right),female
+5108_irnt,3mm asymmetry angle (right),male
+5109_irnt,6mm asymmetry angle (right),female
+5109_irnt,6mm asymmetry angle (right),male
+5110_irnt,6mm asymmetry angle (left),female
+5110_irnt,6mm asymmetry angle (left),male
+5111_irnt,3mm asymmetry angle (left),female
+5111_irnt,3mm asymmetry angle (left),male
+5112_irnt,3mm cylindrical power angle (left),female
+5112_irnt,3mm cylindrical power angle (left),male
+5113_irnt,6mm cylindrical power angle (left),female
+5113_irnt,6mm cylindrical power angle (left),male
+5114_irnt,6mm cylindrical power angle (right),female
+5114_irnt,6mm cylindrical power angle (right),male
+5115_irnt,3mm cylindrical power angle (right),female
+5115_irnt,3mm cylindrical power angle (right),male
+5116_irnt,3mm cylindrical power (right),female
+5116_irnt,3mm cylindrical power (right),male
+5117_irnt,6mm cylindrical power (right),female
+5117_irnt,6mm cylindrical power (right),male
+5118_irnt,6mm cylindrical power (left),female
+5118_irnt,6mm cylindrical power (left),male
+5119_irnt,3mm cylindrical power (left),female
+5119_irnt,3mm cylindrical power (left),male
+5132_irnt,3mm strong meridian (right),female
+5132_irnt,3mm strong meridian (right),male
+5133_irnt,6mm strong meridian (right),female
+5133_irnt,6mm strong meridian (right),male
+5134_irnt,6mm strong meridian (left),female
+5134_irnt,6mm strong meridian (left),male
+5135_irnt,3mm strong meridian (left),female
+5135_irnt,3mm strong meridian (left),male
+5156_irnt,3mm asymmetry index (left),female
+5156_irnt,3mm asymmetry index (left),male
+5157_irnt,6mm asymmetry index (left),female
+5157_irnt,6mm asymmetry index (left),male
+5158_irnt,6mm asymmetry index (right),female
+5158_irnt,6mm asymmetry index (right),male
+5159_irnt,3mm asymmetry index (right),female
+5159_irnt,3mm asymmetry index (right),male
+5160_irnt,3mm regularity index (right),female
+5160_irnt,3mm regularity index (right),male
+5161_irnt,6mm regularity index (right),female
+5161_irnt,6mm regularity index (right),male
+5162_irnt,6mm regularity index (left),female
+5162_irnt,6mm regularity index (left),male
+5163_irnt,3mm regularity index (left),female
+5163_irnt,3mm regularity index (left),male
+5201_irnt,"logMAR, final (right)",female
+5201_irnt,"logMAR, final (right)",male
+5208_irnt,"logMAR, final (left)",female
+5208_irnt,"logMAR, final (left)",male
+5254_irnt,"Intra-ocular pressure, corneal-compensated (right)",female
+5254_irnt,"Intra-ocular pressure, corneal-compensated (right)",male
+5255_irnt,"Intra-ocular pressure, Goldmann-correlated (right)",female
+5255_irnt,"Intra-ocular pressure, Goldmann-correlated (right)",male
+5256_irnt,Corneal hysteresis (right),female
+5256_irnt,Corneal hysteresis (right),male
+5257_irnt,Corneal resistance factor (right),female
+5257_irnt,Corneal resistance factor (right),male
+5262_irnt,"Intra-ocular pressure, corneal-compensated (left)",female
+5262_irnt,"Intra-ocular pressure, corneal-compensated (left)",male
+5263_irnt,"Intra-ocular pressure, Goldmann-correlated (left)",female
+5263_irnt,"Intra-ocular pressure, Goldmann-correlated (left)",male
+5264_irnt,Corneal hysteresis (left),female
+5264_irnt,Corneal hysteresis (left),male
+5265_irnt,Corneal resistance factor (left),female
+5265_irnt,Corneal resistance factor (left),male
+5375_irnt,Longest period of unenthusiasm / disinterest,female
+5375_irnt,Longest period of unenthusiasm / disinterest,male
+5983_irnt,"ECG, heart rate",female
+5983_irnt,"ECG, heart rate",male
+5984_irnt,"ECG, load",female
+5984_irnt,"ECG, load",male
+5986_irnt,"ECG, phase time",female
+5986_irnt,"ECG, phase time",male
+6032_irnt,Maximum workload during fitness test,female
+6032_irnt,Maximum workload during fitness test,male
+6033_irnt,Maximum heart rate during fitness test,female
+6033_irnt,Maximum heart rate during fitness test,male
+6038_irnt,Number of trend entries,female
+6038_irnt,Number of trend entries,male
+699_irnt,Length of time at current address,female
+699_irnt,Length of time at current address,male
+757_irnt,Time employed in main current job,female
+757_irnt,Time employed in main current job,male
+767_irnt,Length of working week for main job,female
+767_irnt,Length of working week for main job,male
+78_irnt,"Heel bone mineral density (BMD) T-score, automated",female
+78_irnt,"Heel bone mineral density (BMD) T-score, automated",male
+796_irnt,Distance between home and job workplace,female
+796_irnt,Distance between home and job workplace,male
+84_irnt,Cancer year/age first occurred,female
+84_irnt,Cancer year/age first occurred,male
+874_irnt,Duration of walks,female
+874_irnt,Duration of walks,male
+914_irnt,Duration of vigorous activity,female
+914_irnt,Duration of vigorous activity,male
+93_irnt,"Systolic blood pressure, manual reading",female
+93_irnt,"Systolic blood pressure, manual reading",male
+94_irnt,"Diastolic blood pressure, manual reading",female
+94_irnt,"Diastolic blood pressure, manual reading",male
