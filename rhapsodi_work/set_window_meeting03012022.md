@@ -8,9 +8,8 @@ which.max(subset_df$phasing_acc) #returns the first index only sadly
 ```
 
 
-for every combination of number of gametes, number of snps, coverage, 
- -- subset to a specific combo of specific average rate of recombination, and specific sequencing error rate
- -- -- find the window lengths that led to the maximum phasing accuracy (which.max == "argmax")
- -- -- -- what's the window length that had (a) the most number of ind replicates that were an argmax (b) the largest such window length
- 
+for every combination of number of gametes, number of snps, coverage <br />
+-- subset to a specific combo of specific average rate of recombination, and specific sequencing error rate <br />
+-- -- find the window lengths that led to the maximum phasing accuracy (which.max == "argmax") <br />
+ -- -- -- what's the window length that had (a) the most number of independent replicates that were an argmax (b) the largest such window length (shorter window lengths take longer to run) <br /> <br />
  -- -- -- -- then it's a linear model given all the input info to find the coefficients that best describe the ideal window length given the input parameters (# of gametes, # of snps, coverage, rate of recomb, sequencing error rate)
