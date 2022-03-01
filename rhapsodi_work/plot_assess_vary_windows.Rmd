@@ -1,0 +1,174 @@
+---
+title: "plot_assess_vary_window"
+author: "Kate Weaver"
+date: "2/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, warning=FALSE}
+library(ggplot2)
+library(patchwork)
+library(ggpubr)
+```
+
+```{r read_csvs}
+g2500_s5000_c0p001 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g2500_s5000_c0.001_assessed.csv" , row.names=1)
+g2500_s5000_c0p01 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g2500_s5000_c0.01_assessed.csv", row.names=1)
+g2500_s5000_c0p1 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g2500_s5000_c0.1_assessed.csv", row.names=1)
+g2500_s5000_c0p223 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g2500_s5000_c0.223_assessed.csv", row.names=1)
+g2500_s5000_c0p693 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g2500_s5000_c0.693_assessed.csv", row.names=1)
+g1000_s30000_c0p01 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g1000_s30000_c0.01_assessed.csv", row.names=1)
+g50_s100000_c0p511 <- read.csv("~/mccoyLab_withOthers/transmission-distortion/assess_varying_windows/g50_s100000_c0.511_assessed.csv", row.names=1)
+```
+
+```{r load_true_nsnp}
+load("~/mccoyLab_withOthers/transmission-distortion/test_data_rhapsodi_gen/true_nsnp_gen_model_noDNM.Rdata")
+```
+
+```{r get_true_nsnp}
+get_true_nsnp <- function(true_nsnp_dict, num_snps, num_gams, coverage, seqerr, avg_recomb, rsd){
+  true_nsnp <- true_nsnp_dict[[format(num_snps, scientific=FALSE, trim=TRUE)]][[as.character(num_gams)]][[as.character(coverage)]][[as.character(seqerr)]][[as.character(avg_recomb)]][[as.character(rsd)]]
+  return(data.frame(true_nsnp = true_nsnp))
+}
+```
+
+```{r get_num_windows}
+get_num_windows <- function(true_nsnp, window_size, overlap_denom){
+  
+  true_nsnp <- as.integer(true_nsnp)
+  window_size <- as.integer(window_size)
+  overlap_denom <- as.numeric(overlap_denom)
+  vector_of_positions <- 1:true_nsnp
+  overlap <- window_size %/% overlap_denom #Degree of overlap between segments
+  starts = seq(1, length(vector_of_positions), by = window_size - overlap)
+  ends   = starts + window_size - 1
+  ends[ends > length(vector_of_positions)] = length(vector_of_positions)
+  windows <- lapply(1:length(starts), function(i) vector_of_positions[starts[i]:ends[i]])
+  
+  #merge the last two windows to avoid edge effect
+  if (length(windows) > 1){
+    combined <- unique(c(windows[[length(windows) - 1]], windows[[length(windows)]]))
+    combined <- combined[order(combined)]
+    total_combined <- windows[-c((length(windows) - 1), length(windows))]
+    total_combined[[length(total_combined) + 1]] <- combined
+    windows <- total_combined
+  }
+  
+  return(data.frame(num_windows = length(windows)))
+}
+```
+
+```{r get_centimorgan_per_windnow}
+get_centimorgan_per_window <- function(avg_recomb, num_windows){
+  avg_recomb <- as.numeric(avg_recomb)
+  num_windows <- as.integer(num_windows)
+  centimorgan_per_window <- avg_recomb * 100 / num_windows
+  return(data.frame(cmpw = centimorgan_per_window))
+}
+```
+
+```{r run_process}
+run_process <- function(true_nsnp_dict, dfoi, title_val){
+  #add true nsnp
+  dfoi$true_nsnp <- do.call(rbind, lapply(1:nrow(dfoi), 
+                                          function(x) get_true_nsnp(true_nsnp_dict,
+                                                                    dfoi$nsnp[x],
+                                                                    dfoi$ngam[x],
+                                                                    dfoi$cov[x],
+                                                                    dfoi$se[x],
+                                                                    dfoi$avgr[x],
+                                                                    dfoi$rsd[x])))
+  
+  #add num windows
+  dfoi$num_windows <- do.call(rbind, lapply(1:nrow(dfoi),
+                                              function(x) get_num_windows(dfoi$true_nsnp[[1]][x], 
+                                                                          dfoi$window_length[x],
+                                                                          dfoi$overlap_denom[x])))
+  
+  #add centimorgans per window
+  dfoi$cmpw <- do.call(rbind, lapply(1:nrow(dfoi),
+                                       function(x) get_centimorgan_per_window(dfoi$avgr[x],                                                                        dfoi$num_windows[[1]][x])))
+  
+  g1 <- ggplot(dfoi, aes(x=log(cmpw[[1]]), y=phasing_acc, col=as.factor(window_length))) +
+    facet_wrap(avgr~se, scales="free") + 
+    geom_point() + 
+    theme_bw() + 
+    theme(panel.grid = element_blank(), panel.background=element_blank(), legend.position = 'none') +
+    ylab("Phasing Accuracy") + xlab('ln(centimorgans/window)') + 
+    ggtitle(paste0(title_val, "ACC"))
+
+  g2 <- ggplot(dfoi, aes(x=log(cmpw[[1]]), y=phasing_ser, col=as.factor(window_length))) +
+    facet_wrap(avgr~se, scales="free") + 
+    geom_point() + 
+    theme_bw() + 
+    theme(panel.grid = element_blank(), panel.background=element_blank(), legend.position = 'none') +
+    ylab("Phasing SER") + xlab('ln(centimorgans/window)') + 
+    ggtitle(paste0(title_val, "SER"))
+
+  g3 <- get_legend(ggplot(dfoi,aes(x=log(cmpw[[1]]),y=phasing_ser,col=as.factor(window_length))) +
+    geom_point() + 
+      facet_wrap(avgr~se, scales="free") + 
+      theme_bw() + 
+      theme(panel.grid = element_blank(), panel.background=element_blank()) +
+      ggtitle(paste0(title_val, "legend")))
+
+  g3 <- as_ggplot(g3)
+  
+  return(list(g1=g1, g2=g2, g3=g3, dfoi=dfoi))
+  
+}
+```
+
+```{r run_process_g2500_s5000_c0p001}
+g2500_s5000_c0p001_out <- run_process(true_nsnp_dict, g2500_s5000_c0p001, "g2500_s5000_c0.001")
+g2500_s5000_c0p001_out$g1
+g2500_s5000_c0p001_out$g2
+g2500_s5000_c0p001_out$g3
+```
+
+```{r run_process_g2500_s5000_c0p01}
+g2500_s5000_c0p01_out <- run_process(true_nsnp_dict, g2500_s5000_c0p01, "g2500_s5000_c0.01")
+g2500_s5000_c0p01_out$g1
+g2500_s5000_c0p01_out$g2
+g2500_s5000_c0p01_out$g3
+```
+
+```{r run_process_g2500_s5000_c0p1}
+g2500_s5000_c0p1_out <- run_process(true_nsnp_dict, g2500_s5000_c0p1, "g2500_s5000_c0.1")
+g2500_s5000_c0p1_out$g1
+g2500_s5000_c0p1_out$g2
+g2500_s5000_c0p1_out$g3
+```
+
+```{r run_process_g2500_s5000_c0p223}
+g2500_s5000_c0p223_out <- run_process(true_nsnp_dict, g2500_s5000_c0p223, "g2500_s5000_c0.223")
+g2500_s5000_c0p223_out$g1
+g2500_s5000_c0p223_out$g2
+g2500_s5000_c0p223_out$g3
+```
+
+```{r run_process_g2500_s5000_c0p693}
+g2500_s5000_c0p693_out <- run_process(true_nsnp_dict, g2500_s5000_c0p693, "g2500_s5000_c0.693")
+g2500_s5000_c0p693_out$g1
+g2500_s5000_c0p693_out$g2
+g2500_s5000_c0p693_out$g3
+```
+
+```{r run_process_g1000_s30000_c0p01}
+g1000_s30000_c0p01_out <- run_process(true_nsnp_dict, g1000_s30000_c0p01, "g1000_s30000_c0.01")
+g1000_s30000_c0p01_out$g1
+g1000_s30000_c0p01_out$g2
+g1000_s30000_c0p01_out$g3
+```
+
+```{r run_process_g50_s100000_c0p511}
+g50_s100000_c0p511_out <- run_process(true_nsnp_dict, g50_s100000_c0p511, "g50_s100000_c0.511")
+g50_s100000_c0p511_out$g1
+g50_s100000_c0p511_out$g2
+g50_s100000_c0p511_out$g3
+```
+
