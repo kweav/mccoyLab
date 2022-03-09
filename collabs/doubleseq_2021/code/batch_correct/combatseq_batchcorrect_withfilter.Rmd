@@ -1,0 +1,1505 @@
+---
+title: "combatseq_batchcorrect_withfilter"
+author: "Kate Weaver"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(rtracklayer)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(edgeR)
+library(ggrepel)
+```
+
+```{r load_adjusted_counts}
+load("~/mccoyLab/collabs/doubleseq_2021/code/batch_correct/combatseq_corrected_withshrinkage.RData")
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20220308.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor))
+#subsetting meta data to just the samples with sequencing data 
+remove <- setdiff(rownames(meta), colnames(corrected_jg_rts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+remove
+
+counts_order <- order(colnames(corrected_jg_rts))
+meta_order <- order(rownames(meta))
+counts <- corrected_jg_rts[, counts_order]
+meta <- meta[meta_order, ]
+meta$name <- rownames(meta)
+```
+
+```{r applydeseqfilter}
+counts_filter <- counts[rowMeans(counts) > 7.63295995515296,]
+```
+
+```{r alltraces_corrected}
+logged_cf <- log2(counts_filter + 1) %>% as.data.frame()
+data_long_logged_cf <- logged_cf %>%
+  pivot_longer(colnames(logged_cf)) %>% 
+  as.data.frame()
+with_batch_lcf <- left_join(data_long_logged_cf, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
+ggplot(data_long_logged_cf, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r colorbyoutcome_corrected}
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r facetbycdna_corrected}
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date)
+```
+
+```{r facetbyseq_corrected}
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date)
+```
+```{r pca_corrected}
+pca_res_cf <- prcomp(t(counts_filter))
+var_explained_cf <- pca_res_cf$sdev^2/sum(pca_res_cf$sdev^2)
+```
+
+```{r pcaseq}
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cf[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cf[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcacdna}
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cf[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cf[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaoutcome}
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cf[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cf[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r load_andsubsetby_gencode}
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+gene_table <- gtf[match(rownames(counts_filter), gtf$ensembl_gene_id),]
+```
+
+```{r TMM_TPM}
+dgeFullData <- DGEList(counts_filter)
+#normalize counts by TMM
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+TMMCounts <- as.matrix(TMMFullData$counts)
+
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+
+#creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+```
+
+```{r 2pcaress}
+pca_res_tmm <- prcomp(t(TMMCounts))
+var_explained_tmm <- pca_res_tmm$sdev^2/sum(pca_res_tmm$sdev^2)
+
+pca_res_tpm <- prcomp(t(rawTPMvals))
+var_explained_tpm <- pca_res_tpm$sdev^2/sum(pca_res_tpm$sdev^2)
+```
+
+```{r plottmmpca}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r plottpmpca}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+
+
+```{r colorbycomplexity}
+tmmsum <- colSums(TMMCounts)
+rawsum <- colSums(counts_filter)
+
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=rawsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cf[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cf$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=rawsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cf[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cf[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=tmmsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=tmmsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r original_colorby_id}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.integer(meta$Study_Participant_ID))) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_liningthick}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$lining_thickness_mm)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_ooctye}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Oocyte_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_uterus}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Uterus_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_sperm}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sperm_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_egaf}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Embryo_grade_at_freezing))) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r sample_label, message=FALSE, warning=FALSE}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r sample_label_color, message= FALSE, warning=FALSE}
+oi1 <- "163-A-1-L" 
+oi1i <- which(rownames(meta) == oi1)
+oi2 <- "205-A-5-L"
+oi2i <- which(rownames(meta) == oi2)
+coloi <- rep(0, length(rownames(meta)))
+coloi[c(oi1i, oi2i)] <- 1
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color = as.factor(coloi), label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+
+```{r stringent_sample_possiblemale}
+sample_vec <- c("101-A-10-L", "103-A-4-L","104-A-8-L",  "107-C-3-L","108-A-3-L", "11-B-12-L", "122-A-4-L",  "125-A-4-L", "129-A-3-L", "130-A-13-L", "15-C-4-L", "152-A-5-L", "156-A-2-L",  "167-C-4-L", "173-B-5-L", 
+"179-A-6-L", "180-A-1-L",  "185-A-2-L", "2-A-3-L",    "202-A-11-L","218-A-5-L",
+"31-A-1-L","36-A-2-L",   "37-A-4-L","4-B-1-L",   
+"54-A-10-L","59-B-6-L",   "73-A-2-L","75-A-4-L",   "88-A-7-L","89-A-2-L",   "99-A-3-L" )
+```
+
+```{r}
+oii <- which(rownames(meta) %in% sample_vec)
+coloi <- rep(0, length(rownames(meta)))
+coloi[oii] <- 1
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color = as.factor(coloi), label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AOD}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AOD)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_GC}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$GC)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r stringent_colorby_BMI}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$BMI)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r stringent_colorby_Infertility_type}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Infertility_type)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_Previouspreg}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Previous_pregnancy)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_past_surg}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Past_surgical_hist)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_FSH_D3}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$FSH_D3)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AMH}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AMH)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AFC}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AFC)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_LH}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$LH)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_E2_Day_2_3}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$E2_Day_2_3)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_trigger_type}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Type_of_trigger))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_Total_Gn}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Total_Gn)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_E2_trigger}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$E2_on_trigger)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_neggs}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Num_eggs)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_nmii}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Num_MII)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_tstripping}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_stripping_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_ticsi}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_ICSI_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_tbiopsy}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_Biopsy_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_interp}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Interpretation)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_natcylce}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Natural_cycle))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_meds}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Medication))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_prednisone}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Prednisone))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_fragmin}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Fragmin))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_eg}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$EG))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_HCG}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$HCG))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_IL}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$IL))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_gcsf}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$GCSF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_metformin}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Metformin))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_prp}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PRP))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_sildenafil}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Sildenafil))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_trphys}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Transferring_physician))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_trcath}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Transfer_catheter_used))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_ssmgc}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_SSM_GC))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_eggf}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Egg_factor))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_mf}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_MF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_uterinef}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Uterine_factor))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_tf}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_TF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_rpl}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_RPL))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_rif}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_RIF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_unexpl}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Unexplained))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_pmdhone}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_none))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_vasc}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_vasculitis))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_immune}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_immune))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_stress}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_stress_hormones))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r stringent_colorby_ongpreg}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Ongoing_pregnancy))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_final}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Final_outcome))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r original_colorby_idtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.integer(meta$Study_Participant_ID))) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_liningthicktpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$lining_thickness_mm)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_ooctyetpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Oocyte_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_uterustpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Uterus_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_spermtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sperm_Age)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r original_colorby_egaftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Embryo_grade_at_freezing)) + 
+  geom_point() + theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r sample_labeltpm, message=FALSE, warning=FALSE}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+```{r sample_label_colortpm, message= FALSE, warning=FALSE}
+oi1 <- "163-A-1-L" 
+oi1i <- which(rownames(meta) == oi1)
+oi2 <- "205-A-5-L"
+oi2i <- which(rownames(meta) == oi2)
+coloi <- rep(0, length(rownames(meta)))
+coloi[c(oi1i, oi2i)] <- 1
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color = as.factor(coloi), label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+
+```{r}
+oii <- which(rownames(meta) %in% sample_vec)
+coloi <- rep(0, length(rownames(meta)))
+coloi[oii] <- 1
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color = as.factor(coloi), label=rownames(meta))) + 
+  geom_point() + 
+  geom_text_repel() +
+  theme_bw() +
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AODtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AOD)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_GCtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$GC)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r stringent_colorby_BMItpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$BMI)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r tpmstringent_colorby_Infertility_type}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Infertility_type)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r tpmstringent_colorby_Previouspreg}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Previous_pregnancy)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r tpmstringent_colorby_past_surg}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Past_surgical_hist)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_FSH_D3tpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$FSH_D3)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AMHtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AMH)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_AFCtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$AFC)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_LHtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$LH)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_E2_Day_2_3tpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$E2_Day_2_3)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r tpmstringent_colorby_trigger_type}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Type_of_trigger))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_Total_Gntpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Total_Gn)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_E2_triggertpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$E2_on_trigger)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_neggstpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Num_eggs)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_nmiitpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Num_MII)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_tstrippingtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_stripping_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_ticsitpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_ICSI_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_tbiopsytpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Time_to_Biopsy_hr)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_interptpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Interpretation)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_natcylcetpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Natural_cycle))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_medstpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Medication))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_prednisonetpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Prednisone))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_fragmintpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Fragmin))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_egtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$EG))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_HCGtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$HCG))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_ILtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$IL))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_gcsftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$GCSF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_metformintpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Metformin))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_prptpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PRP))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_sildenafiltpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Sildenafil))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_trphystpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Transferring_physician))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_trcathtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Transfer_catheter_used))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_ssmgctpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_SSM_GC))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_eggftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Egg_factor))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_mftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_MF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_uterineftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Uterine_factor))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_tftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_TF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_rpltpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_RPL))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_riftpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_RIF))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_unexpltpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$InfD_Unexplained))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_pmdhonetpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_none))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_vasctpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_vasculitis))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+```{r stringent_colorby_immunetpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_immune))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_stresstpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$PMdH_stress_hormones))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r stringent_colorby_ongpregtpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Ongoing_pregnancy))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r stringent_colorby_finaltpm}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Final_outcome))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
