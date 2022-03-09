@@ -19,7 +19,7 @@ library(scales)
 ## Read in metadata from expanded batch 2 split
 ```{r}
 
-full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20211217.csv", row.names = 1)
+full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20220308.csv", row.names = 1)
 
 meta_train <- full_meta_withSet[which(full_meta_withSet$set == "train"),]
 train_unique_study_participants <- table(meta_train$Study_Participant_ID)
@@ -38,11 +38,13 @@ pie_plot <- function(data_frame_toplot, main_title){
 }
 
 violin_plot <- function(data_frame_toplot, ylabel){
-  ggplot(data_frame_toplot, aes(x=name, y=val, fill=name)) + scale_x_discrete(limits=c("train", "test")) + geom_violin(scale="width", adjust=1, width=0.5) + labs(y=ylabel, x="set") + geom_boxplot(width = 0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+  ggplot(data_frame_toplot, aes(x=name, y=val, fill=name)) + scale_x_discrete(limits = c("train", "test"), labels=c(paste0("train\nn=",sum(data_frame_toplot$name == "train")), paste0("test\nn=",sum(data_frame_toplot$name == 'test')))) + geom_violin(scale="width", adjust=1, width=0.5) + labs(y=ylabel, x="set") + geom_boxplot(width = 0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
 }
 
-bar_plot <- function(data_frame_toplot, ylabel, xlabel, title){
-  gp <- ggplot(data_frame_toplot, aes(x=name, y=val, fill=col)) + geom_bar(stat = "identity") + labs(y=ylabel, x =xlabel, title=title)+ theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + scale_fill_manual(values=unique(data_frame_toplot$col)) + theme(legend.position = "none")
+bar_plot <- function(data_frame_toplot, ylabel, xlabel, title, totalsnameval=FALSE){
+  if (totalsnameval){
+    totalnum <- data_frame_toplot$val %*% as.numeric(data_frame_toplot$name)} else { totalnum <- sum(data_frame_toplot$val)}
+  gp <- ggplot(data_frame_toplot, aes(x=name, y=val, fill=col)) + geom_bar(stat = "identity") + labs(y=ylabel, x =xlabel, title=paste0(title, " (n= ", totalnum, ")"))+ theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + scale_fill_manual(values=unique(data_frame_toplot$col)) + theme(legend.position = "none")
   return(gp)
 }
 ```
@@ -64,11 +66,11 @@ testbar.x <- as.numeric(table(test_unique_study_particpants))
 names(testbar.x) <- names(table(test_unique_study_particpants))
 
 train_ne <- data.frame(val = trainbar.x, name = names(trainbar.x), col=hue_pal()(2)[1])
-gp_train <- bar_plot(train_ne, "Number of Study Participants", "Number of Embryos", "Train")
+gp_train <- bar_plot(train_ne, "Number of Study Participants", "Number of Embryos", "Train", totalsnameval = TRUE)
 
 #test study participants 65 and 91 used to have 3 embryos, they now have 4; they're the only two that changed. All the others are new
 test_ne <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
-gp_test <- bar_plot(test_ne, "Number of Study Participants", "Number of Embryos", "Test")
+gp_test <- bar_plot(test_ne, "Number of Study Participants", "Number of Embryos", "Test", totalsnameval = TRUE)
 
 gp_train + gp_test
 
@@ -97,12 +99,12 @@ gp_train + gp_test
 trainbar.x <- as.numeric(table(meta_train$Pregnant))
 names(trainbar.x) <- names(table(meta_train$Pregnant))
 train_egaf <- data.frame(val=trainbar.x, name=names(trainbar.x), col=hue_pal()(2)[1])
-gp_train <- bar_plot(train_egaf, "Number of Embryos", "Pregnant Outcome", "Train")
+gp_train <- bar_plot(train_egaf, "Number of Embryos", "Implantation Outcome", "Train")
 
 testbar.x <- as.numeric(table(meta_test$Pregnant))
 names(testbar.x) <- names(table(meta_test$Pregnant))
 test_egaf <- data.frame(val = testbar.x, name=names(testbar.x), col=hue_pal()(2)[2])
-gp_test <- bar_plot(test_egaf, "Number of Embryos", "Pregnant Outcome", "Test")
+gp_test <- bar_plot(test_egaf, "Number of Embryos", "Implantation Outcome", "Test")
 
 gp_train + gp_test
 

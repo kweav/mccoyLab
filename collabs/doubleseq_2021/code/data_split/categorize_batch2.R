@@ -7,7 +7,7 @@ set.seed(random_seed)
 embryoSet_file <- 'data_split/embryoID_by_set.csv'
 categorized_meta_file <- 'tidied_meta/tidied_meta_batch1_CREATE_kw.csv'
 tobe_categorized_meta_file <- 'tidied_meta/tidied_meta_batch2_CREATE_kw.csv'
-meta_full_file <- 'tidied_meta/tidied_meta_CREATE_kw_20211217.csv'
+meta_full_file <- 'tidied_meta/tidied_meta_CREATE_kw_20220308.csv'
 
 embryoSet <- read.csv(embryoSet_file, row.names  = 1)
 categorized_meta <- read.csv(categorized_meta_file, row.names=1)
@@ -49,9 +49,10 @@ train_eid_df <- data.frame(embryoID = train_embryoID, set = "train")
 test_eid_df <- data.frame(embryoID = test_embryoID, set = "test")
 eid_df <- rbind(train_eid_df, test_eid_df) %>% `rownames<-`(.[,"embryoID"])
 eid_df <- rbind(eid_df, categorize_batch2_pt1[,c("embryoID", "set")])
-write.csv(eid_df, 'data_split/embryo_bySet_batch2.csv')
+#write.csv(eid_df, 'data_split/embryo_bySet_batch2.csv')
 
 full_eid_df <- rbind(embryoSet, select(eid_df, "set"))
-write.csv(full_eid_df, 'data_split/embryo_bySet_full_kw_20211217.csv')
+#write.csv(full_eid_df, 'data_split/embryo_bySet_full_kw_20211217.csv')
 full_meta_withSet <- merge(full_eid_df, full_meta, by=0) %>% `rownames<-`(.[,"Row.names"]) %>% select(-"Row.names")
-write.csv(full_meta_withSet, 'tidied_meta/meta_withSet_kw_20211217.csv')
+#write.csv(full_meta_withSet, 'tidied_meta/meta_withSet_kw_20211217.csv')
+write.csv(full_meta_withSet, 'tidied_meta/meta_withSet_kw_20220308.csv')

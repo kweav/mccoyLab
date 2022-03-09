@@ -25,7 +25,7 @@ tidy_raw_metadata <- function(meta_file){
     mutate(AMH = as.numeric(as.character(recode(AMH, ">127"="128")))) %>%
     mutate(LH = as.numeric(as.character(recode(as.character(LH), ">9"="10")))) %>%
     mutate(E2_Day_2_3 = as.numeric(as.character(recode(E2_Day_2_3, "<18"="17")))) %>%
-    mutate(Embryo_grade_at_freezing = recode(Embryo_grade_at_freezing, "1AA"=1, "1AB"=2, "1BA"=3, "1BB"=4, "1CB"=5, "2AA"=6, "2AB"=7, "2BA"=8, "2BB"=9, "2CC"=10, "3AA"=11, "3BB"=12)) %>%
+    mutate(Embryo_grade_at_freezing = recode(Embryo_grade_at_freezing, "1AA"="Good", "1AB"="Good", "1BA"="Fair", "1BB"="Fair", "1CB"="Poor", "2AA"="Good", "2AB"="Good", "2BA"="Fair", "2BB"="Fair", "2CC"="Poor", "3AA"="Good", "3BB"="Fair")) %>%
     mutate(Interpretation = recode(Interpretation, "EUPLOID"=0, "MOSAIC"=1)) %>%
     mutate(Prednisone = as.factor(recode(as.character(Prednisone), "B"="1"))) %>%
     mutate(Transferring_physician = as.factor(recode(as.character(Transferring_physician), "PS" = "1", "AB" = "2", "KG" = "3", "CL"="4", "Fellow"="5", "AK"="6"))) %>%
@@ -78,6 +78,6 @@ meta_tidied2 <- tidy_raw_metadata(meta_raw2)
 write.csv(meta_tidied2, "tidied_meta/tidied_meta_batch2_CREATE_kw.csv")
 
 meta_full <- rbind(meta_tidied1,  meta_tidied2)
-write.csv(meta_full, "tidied_meta/tidied_meta_CREATE_kw_20211217.csv")
-
+#write.csv(meta_full, "tidied_meta/tidied_meta_CREATE_kw_20211217.csv")
+write.csv(meta_full, "tidied_meta/tidied_meta_CREATE_kw_20220308.csv")
 
