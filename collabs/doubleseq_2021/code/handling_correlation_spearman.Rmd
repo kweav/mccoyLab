@@ -1,0 +1,202 @@
+---
+title: "correlation_spearman"
+author: "Kate Weaver"
+date: "3/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loadpackages}
+library(tidyverse)
+library(ggplot2)
+library(rtracklayer)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(edgeR)
+```
+
+# Find the by gene correlations among embryos from the same study participants within the data we have
+
+```{r load_adjusted_counts}
+load("~/mccoyLab/collabs/doubleseq_2021/code/batch_correct/combatseq_corrected_withshrinkage.RData")
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20211217.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor))
+#subsetting meta data to just the samples with sequencing data 
+remove <- setdiff(rownames(meta), colnames(corrected_jg_rts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+remove
+
+counts_order <- order(colnames(corrected_jg_rts))
+meta_order <- order(rownames(meta))
+counts <- corrected_jg_rts[, counts_order]
+meta <- meta[meta_order, ]
+meta$name <- rownames(meta)
+```
+
+```{r}
+sibid_mat <- matrix(nrow=nrow(meta), ncol=nrow(meta), dimnames=list(meta$name, meta$name))
+cycle_mat <- matrix(nrow=nrow(meta), ncol=nrow(meta), dimnames=list(meta$name, meta$name))
+numsibs_mat <- matrix(nrow=nrow(meta), ncol=nrow(meta), dimnames=list(meta$name, meta$name))
+implantation_mat <- matrix(nrow=nrow(meta), ncol=nrow(meta), dimnames=list(meta$name, meta$name))
+for (i in 1:nrow(meta)){
+  pid <- meta$Study_Participant_ID[i]
+  cyclei <- strsplit(rownames(meta)[i], '-')[[1]][2]
+  anysibs <- setdiff(which(meta$Study_Participant_ID == pid), i)
+  toset <- rep(NA, nrow(meta))
+  tosetcycle <- rep(NA, nrow(meta))
+  tosetnum <- rep(NA, nrow(meta))
+  tosetimp <- rep(NA, nrow(meta))
+  if (i != nrow(meta)){
+    toset[(i+1):nrow(meta)] <- "nonsib"
+  }
+  if (length(anysibs) > 0){
+    impbool <- sum(meta$Pregnant[which(meta$Study_Participant_ID == pid)]) > 0
+    notalreadyseen <- anysibs[anysibs > i]
+    if (length(notalreadyseen) > 0){
+      cycles_nas <- unlist(lapply(notalreadyseen, function(x) strsplit(rownames(meta)[x], '-')[[1]][2]))
+      toset[notalreadyseen] <- "sib"
+      tosetcycle[notalreadyseen] <- cycles_nas == cyclei
+      tosetnum[notalreadyseen] <- length(anysibs) + 1
+      tosetimp[notalreadyseen] <- impbool
+    }
+  }
+  sibid_mat[i,] <- toset
+  cycle_mat[i,] <- tosetcycle
+  numsibs_mat[i,] <- tosetnum
+  implantation_mat[i,] <- tosetimp
+}
+```
+
+
+```{r applydeseqfilter}
+counts_filter <- counts[rowMeans(counts) > 7.63295995515296,]
+logged_cf <- log2(counts_filter + 1) %>% as.data.frame()
+```
+
+```{r load_andsubsetby_gencode}
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+gene_table <- gtf[match(rownames(counts_filter), gtf$ensembl_gene_id),]
+```
+
+```{r TMM_TPM}
+dgeFullData <- DGEList(counts_filter)
+#normalize counts by TMM
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+TMMCounts <- as.matrix(TMMFullData$counts)
+
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+
+#creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+```
+
+
+```{r}
+cor_mat_tpm <- cor(rawTPMvals, method="spearman")
+cor_mat_tmm <- cor(TMMCounts, method="spearman")
+cor_mat_logcf <- cor(logged_cf, method="spearman")
+
+```
+
+```{r}
+cordf_spearman <- data.frame(cor_tpm = cor_mat_tpm[upper.tri(cor_mat_tpm)],
+                    cor_tmm = cor_mat_tmm[upper.tri(cor_mat_tmm)],
+                    cor_logcf = cor_mat_logcf[upper.tri(cor_mat_logcf)],
+                    sibid = sibid_mat[upper.tri(sibid_mat)],
+                    cycle = cycle_mat[upper.tri(cycle_mat)],
+                    numsib = numsibs_mat[upper.tri(numsibs_mat)],
+                    atleastoneimplant = implantation_mat[upper.tri(implantation_mat)] ) %>% 
+  unite(sibidwnum, c('sibid', 'numsib'), remove=FALSE) %>% 
+  unite(sibidwcycle, c('sibid', 'cycle'), remove=FALSE)
+
+
+```
+
+
+```{r plotcombine_kwt_tpm}
+set.seed(118)
+ggplot(cordf_spearman, aes(y=cor_tpm, x=sibid)) + geom_violin()
+
+g0 <- ggplot(cordf_spearman, aes(y=cor_tpm, x=sibid)) + geom_boxplot() + scale_x_discrete(limits = c("nonsib", "sib"), labels=c(paste0("Non-Sibling\nn=",sum(cordf_spearman$sibid == "nonsib")), paste0("Sibling\nn=",sum(cordf_spearman$sibid == 'sib')))) + xlab("Pairwise embryo relation") + ylab("Spearman's rho") + theme_bw() + theme( panel.background = element_blank(), panel.grid = element_blank())
+
+g0
+
+g0 + geom_point(data = subset(cordf_spearman, sibid != "nonsib"), position=position_jitter(width = .2, height=0))
+
+g0 + geom_point(data = subset(cordf_spearman, sibid != "nonsib"), position=position_jitter(width = .2, height=0), aes(color=cycle)) + scale_color_discrete(name = "Same Cycle?")
+
+g0 + geom_point(data = subset(cordf_spearman, sibid != "nonsib"), position=position_jitter(width = .2, height=0), aes(color=cycle, shape=atleastoneimplant)) + scale_color_discrete(name = "Same Cycle?") + scale_shape_discrete(name = "At least one\nsuccessful implantation?")
+
+kruskal.test(cor_tpm ~ sibid, data=cordf_spearman)
+```
+
+```{r}
+g1 <- ggplot(cordf_spearman, aes(y=cor_tpm, x=sibidwnum)) + geom_boxplot() + scale_x_discrete(limits = c("nonsib_NA", "sib_2", "sib_3", "sib_4"), labels=c(paste0("Non-Sibling\nn=",sum(cordf_spearman$sibid == "nonsib")), paste0("From 2 Sibling set\nn=",sum(cordf_spearman$sibidwnum == 'sib_2')), paste0("From 3 Sibling set\nn=",sum(cordf_spearman$sibidwnum == 'sib_3')), paste0("From 4 Sibling set\nn=",sum(cordf_spearman$sibidwnum == "sib_4")))) + xlab("Pairwise embryo relation") + ylab("Spearman's rho") + theme_bw() + theme( panel.background = element_blank(), panel.grid = element_blank())
+
+g1
+
+g1 + geom_point(data = subset(cordf_spearman, sibidwnum != 'nonsib_NA'), position = position_jitter(width = .2, height=0))#geom_jitter(width=0.2, height=0)
+
+g1 + geom_point(data = subset(cordf_spearman, sibidwnum != 'nonsib_NA'), position = position_jitter(width = .2, height=0), aes(color=cycle)) + scale_color_discrete(name = "Same Cycle?")
+
+g1 + geom_point(data = subset(cordf_spearman, sibidwnum != 'nonsib_NA'), position = position_jitter(width = .2, height=0), aes(color=cycle, shape=atleastoneimplant)) + scale_color_discrete(name = "Same Cycle?") + scale_shape_discrete(name = "At least one\nsuccessful implantation?")
+
+```
+
+```{r}
+rowCol <- expand.grid(rownames(cor_mat_tpm), colnames(cor_mat_tpm))
+labs <- rowCol[as.vector(upper.tri(cor_mat_tpm)),]
+cordf_spearman <- cbind(cordf_spearman, labs)
+```
+
+```{r, eval=FALSE}
+
+cordf_spearman[sample(which(cordf_spearman$sibid == 'nonsib'), 1), c("Var1", "Var2")]
+```
+
+```{r}
+nonsib_x_vals <- rawTPMvals[,"15-C-4-L"]
+nonsib_y_vals <- rawTPMvals[,"99-A-3-L"]
+```
+
+
+```{r, eval=FALSE}
+
+cordf_spearman[sample(which(cordf_spearman$sibid == 'sib' & cordf_spearman$cycle == TRUE), 1), c("Var1", "Var2")]
+```
+
+```{r}
+sib_x_vals <- rawTPMvals[,"202-A-11-L"]
+sib_y_vals <- rawTPMvals[,"202-A-7-L"]
+```
+
+```{r}
+toplotdf <- data.frame(x = c(nonsib_x_vals, sib_x_vals),
+                       y = c(nonsib_y_vals, sib_y_vals),
+                       sibid = c(rep("Non-Siblings", nrow(rawTPMvals)), rep("Siblings", nrow(rawTPMvals))))
+
+ggplot(toplotdf, aes(x=x+1, y=y+1)) + geom_point(alpha=0.2) + facet_wrap(~sibid) + scale_y_log10() + scale_x_log10() + geom_smooth(method="lm", se=FALSE) + ylab("log10(TPM+1) Sample2") + xlab("log10(TPM+1) Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+

@@ -1,0 +1,880 @@
+---
+title: "batch_correct_combatseq"
+author: "Kate Weaver"
+date: "2/14/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r install_package, eval=FALSE}
+library(devtools)
+if ( requireNamespace("sva")){
+  message("Already installed")
+  remove.packages("sva")
+  devtools::install_github("zhangyuqing/sva-devel")
+  packageVersion("sva")
+} else{
+  devtools::install_github("zhangyuqing/sva-devel")
+  packageVersion("sva")
+}
+```
+
+```{r load_packages, warning=FALSE, message=FALSE}
+library(SummarizedExperiment)
+library(sva)
+library(rtracklayer)
+library(edgeR)
+library(tidyverse)
+library(data.table)
+library(readxl)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(ggplot2)
+```
+
+```{r load_data_se}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220207.Rdata")
+counts <- as.matrix(assays(seAll)$counts)
+for (col in 1:ncol(counts)){
+  colnames(counts)[col]<-strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
+}
+```
+
+```{r load_andsubsetby_gencode}
+#subset to genes with matching gencode ensembl gene IDs on chr1-22
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+gene_table <- gtf[match(rownames(counts), gtf$ensembl_gene_id),]
+gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
+counts <- counts[gene_table$ensembl_gene_id,]
+```
+
+```{r load_andmatchby_meta}
+#Importing metadata to differentiate between pregnant and not pregnant and other main covariates
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20220308.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor))
+#subsetting meta data to just the samples with sequencing data            
+remove <- setdiff(rownames(meta), colnames(counts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+remove
+
+#need to sort so name order is the same for setting up design for DESeq experiment
+counts_order <- order(colnames(counts))
+meta_order <- order(rownames(meta))
+counts <- counts[, counts_order]
+meta <- meta[meta_order, ]
+```
+
+```{r letsplot_nomean}
+logged_data <- log2(counts + 1) %>% as.data.frame()
+data_long <- logged_data %>%
+  pivot_longer(colnames(logged_data)) %>% 
+  as.data.frame()
+```
+
+```{r alltraces_nomean}
+ggplot(data_long, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank()) + xlab("log2(count+1)")
+```
+
+```{r concatmeta}
+meta$name <- rownames(meta)
+with_batch <- left_join(data_long, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
+```
+
+```{r colorbyoutcome}
+ggplot(with_batch, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("log2(count+1)")
+```
+
+
+```{r facetbycdna}
+ggplot(with_batch, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date) + xlab("log2(count+1)")
+```
+
+```{r facetbyseq}
+ggplot(with_batch, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date) + xlab("log2(count+1)")
+```
+
+```{r combatseq_justgroup_sd}
+corrected_jg <- sva::ComBat_seq(counts=as.matrix(counts), batch=meta$Sequencing_Date, group=meta$Pregnant, full_mod = TRUE)
+```
+
+```{r letsplot_corrected}
+logged_cjg <- log2(corrected_jg + 1) %>% as.data.frame()
+data_long_cjg <- logged_cjg %>%
+  pivot_longer(colnames(logged_cjg)) %>% 
+  as.data.frame()
+with_batch_cjg <- left_join(data_long_cjg, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
+```
+
+```{r alltraces_corrected}
+ggplot(data_long_cjg, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r colorbyoutcome_corrected}
+ggplot(with_batch_cjg, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r facetbycdna_corrected}
+ggplot(with_batch_cjg, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date)
+```
+
+```{r facetbyseq_cjg}
+ggplot(with_batch_cjg, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date)
+```
+
+```{r pca_cjg}
+pca_res_cjg <- prcomp(t(corrected_jg))
+var_explained_cjg <- pca_res_cjg$sdev^2/sum(pca_res_cjg$sdev^2)
+```
+
+```{r pcaseq}
+pca_res_cjg$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcacdna}
+pca_res_cjg$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaoutcome}
+pca_res_cjg$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r combatseq_justgroup_cdna}
+corrected_jg <- sva::ComBat_seq(counts=as.matrix(counts), batch=meta$cDNA_RT_Date, group=meta$Pregnant, full_mod = TRUE)
+```
+
+```{r whichbatch}
+table(meta$cDNA_RT_Date)
+```
+
+Ok, we're going to try to cluster the batches so that batch 20 is combined into a pseudo-batch with the most closely related batch.
+
+I don't want to cluster the samples with each other because I think that clustering will be confounded by/based on study-participant identity. 
+
+* for each sample, divide the gene count by the total number of counts within that sample library --> x (counts_lib_norm)
+* for each batch, average the gene “x” --> vectors of y, {y_b1, y_b2, … y_b20} (averaged_batches)
+* cluster based on distance between batches
+
+```{r clusterbatches}
+library(pheatmap)
+counts_lib_norm <- sweep(counts, 2, colSums(counts), `/`)
+averaged_batches <- cbind(sapply(1:20, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:20)
+colnames(batchDistMatrix) <- paste0("batch", 1:20)
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists, angle_col = 45)
+```
+
+```{r clusterbatches_filter}
+counts_filter <- counts[rowMeans(logged_data) > 3,]
+counts_lib_norm <- sweep(counts_filter, 2, colSums(counts_filter), `/`)
+averaged_batches <- cbind(sapply(1:20, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:20)
+colnames(batchDistMatrix) <- paste0("batch", 1:20)
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists, clustering_distance_columns=batchDists)
+```
+
+In both the no filtering at all and the filtering case, batch17 and batch20 are the most closely related, so I'll make a pseudo batch combining those two
+
+```{r pseudobatch_in_meta}
+meta[which(meta$cDNA_RT_Date == 20), "cDNA_RT_Date"] <-17
+meta$cDNA_RT_Date <- factor(meta$cDNA_RT_Date, levels = 1:19)
+table(meta$cDNA_RT_Date)
+```
+
+```{r applydeseqfilter}
+counts_filter <- counts[rowMeans(counts) > 7.63295995515296,]
+```
+
+```{r combatseq_justgroup_cdna}
+corrected_jg <- sva::ComBat_seq(counts=as.matrix(counts_filter), batch=meta$cDNA_RT_Date, group=meta$Pregnant, full_mod = TRUE)
+```
+
+```{r alltraces_corrected}
+logged_cjg_rt <- log2(corrected_jg + 1) %>% as.data.frame()
+data_long_cjg_rt <- logged_cjg_rt %>%
+  pivot_longer(colnames(logged_cjg_rt)) %>% 
+  as.data.frame()
+with_batch_cjg_rt <- left_join(data_long_cjg_rt, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
+ggplot(data_long_cjg_rt, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r colorbyoutcome_corrected}
+ggplot(with_batch_cjg_rt, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r facetbycdna_corrected}
+ggplot(with_batch_cjg_rt, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date)
+```
+
+```{r facetbyseq_cjg}
+ggplot(with_batch_cjg_rt, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date)
+```
+
+```{r pca_cjg}
+pca_res_cjg_rt <- prcomp(t(corrected_jg))
+var_explained_cjg_rt <- pca_res_cjg_rt$sdev^2/sum(pca_res_cjg_rt$sdev^2)
+```
+
+```{r pcaseq}
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rt[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rt[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcacdna}
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rt[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rt[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaoutcome}
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rt[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rt[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r TMM_TPM}
+gene_table <- gene_table[rowMeans(counts) > 7.63295995515296,]
+
+dgeFullData <- DGEList(corrected_jg)
+#normalize counts by TMM
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+TMMCounts <- as.matrix(TMMFullData$counts)
+
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+
+#creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+```
+
+```{r 2pcaress}
+pca_res_tmm <- prcomp(t(TMMCounts))
+var_explained_tmm <- pca_res_tmm$sdev^2/sum(pca_res_tmm$sdev^2)
+
+pca_res_tpm <- prcomp(t(rawTPMvals))
+var_explained_tpm <- pca_res_tpm$sdev^2/sum(pca_res_tpm$sdev^2)
+```
+
+```{r plottmmpca}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r plottpmpca}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r colorbycomplexity}
+tmmsum <- colSums(TMMCounts)
+rawsum <- colSums(corrected_jg)
+
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=rawsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rt[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_cjg_rt$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=rawsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rt[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rt[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=tmmsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=tmmsum)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+
+the following cell was running for over two hours when I finally decided to just put this on marcc and make it save as an rdata...stay tuned
+```{r combatseq_justgroup_cdna, eval=FALSE}
+corrected_jg_rts <- sva::ComBat_seq(counts=as.matrix(counts), batch=meta$cDNA_RT_Date, group=meta$Pregnant, full_mod = TRUE, shrink = TRUE, shrink.disp = TRUE)
+```
+
+```{r loadRdatacorrected}
+load("~/mccoyLab/collabs/doubleseq_2021/code/batch_correct/combatseq_corrected_withshrinkage.RData")
+```
+
+
+```{r alltraces_corrected}
+logged_cjg_rts <- log2(corrected_jg_rts + 1) %>% as.data.frame()
+data_long_cjg_rts <- logged_cjg_rts %>%
+  pivot_longer(colnames(logged_cjg_rts)) %>% 
+  as.data.frame()
+with_batch_cjg_rts <- left_join(data_long_cjg_rts, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
+ggplot(data_long_cjg_rts, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r colorbyoutcome_corrected}
+ggplot(with_batch_cjg_rts, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r facetbycdna_corrected}
+ggplot(with_batch_cjg_rts, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date)
+```
+
+```{r facetbyseq_cjg}
+ggplot(with_batch_cjg_rts, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date)
+```
+
+```{r pca_cjg}
+pca_res_cjg_rts <- prcomp(t(corrected_jg_rts))
+var_explained_cjg_rts <- pca_res_cjg_rts$sdev^2/sum(pca_res_cjg_rts$sdev^2)
+```
+
+```{r pcaseq}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rts[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcacdna}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rts[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaoutcome}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_cjg_rts[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaseq}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rts[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcacdna}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rts[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcaoutcome}
+pca_res_cjg_rts$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_cjg_rts[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_cjg_rts[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r TMM_TPM}
+dgeFullData <- DGEList(corrected_jg_rts)
+#normalize counts by TMM
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+TMMCounts <- as.matrix(TMMFullData$counts)
+
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+
+#creates a matrix with calculated TPM values for each sample from TMM normalized counts and the gene lengths
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+
+```
+
+```{r counts_libsize}
+norm_libsize <- sweep(corrected_jg_rts, 2, colSums(corrected_jg_rts), `/`)
+```
+
+```{r 3pcaress}
+pca_res_tmm <- prcomp(t(TMMCounts))
+var_explained_tmm <- pca_res_tmm$sdev^2/sum(pca_res_tmm$sdev^2)
+
+pca_res_tpm <- prcomp(t(rawTPMvals))
+var_explained_tpm <- pca_res_tpm$sdev^2/sum(pca_res_tpm$sdev^2)
+
+pca_res_norm <- prcomp(t(norm_libsize))
+var_explained_norm <- pca_res_norm$sdev^2/sum(pca_res_norm$sdev^2)
+```
+
+
+```{r rlogtransformation}
+library(DESeq2)
+pca_res_rlog <- prcomp(t(vst(corrected_jg_rts)))
+var_explained_rlog <- pca_res_rlog$sdev^2/sum(pca_res_rlog$sdev^2)
+```
+
+A very long computation once again :(. Trying to set up on an hpc
+```{r dds_results}
+dds <- DESeqDataSetFromMatrix(countData = corrected_jg_rts,
+                              colData = meta,
+                              design = ~ factor(Pregnant) +  factor(cDNA_RT_Date))
+dds  <- DESeq(dds)
+res <- results(dds)
+metadata(res)$filterThreshold
+```
+
+```{r plotrlogpca}
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_rlog[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_rlog[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_rlog[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_rlog[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_rlog[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_rlog$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_rlog[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_rlog[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r plottmmpca}
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tmm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tmm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tmm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tmm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r plottpmpca}
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_tpm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_tpm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_tpm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_tpm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r plotnormpca}
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_norm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_norm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_norm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_norm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(var_explained_norm[1]*100,1), "%"),
+       x=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+pca_res_norm$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(var_explained_norm[2]*100,1), "%"),
+       x=paste0("PC3: ", round(var_explained_norm[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+baseMean threshold from DESeq2 is 7.63295995515296
+
+```{r redoPCAfilterthresh}
+corrected_jg_rts_pft <- corrected_jg_rts[rowMeans(corrected_jg_rts) > 7.63295995515296, ]
+dim(corrected_jg_rts_pft)
+TMMCounts_pft <- TMMCounts[rowMeans(corrected_jg_rts) > 7.63295995515296, ]
+dim(TMMCounts_pft)
+```
+
+
+```{r}
+ft_pca_res <- prcomp(t(TMMCounts_pft))
+ft_var_explained <- ft_pca_res$sdev^2/sum(ft_pca_res$sdev^2)
+```
+
+```{r plotnormpca}
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(ft_var_explained[1]*100,1), "%"),
+       x=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$Sequencing_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%"),
+       x=paste0("PC3: ", round(ft_var_explained[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(ft_var_explained[1]*100,1), "%"),
+       x=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=meta$cDNA_RT_Date)) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%"),
+       x=paste0("PC3: ", round(ft_var_explained[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC1: ", round(ft_var_explained[1]*100,1), "%"),
+       x=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+
+ft_pca_res$x %>% 
+  as.data.frame %>% 
+  ggplot(aes(y=PC2, x=PC3, color=as.factor(meta$Pregnant))) + 
+  geom_point() + theme_bw() + 
+  labs(y=paste0("PC2: ", round(ft_var_explained[2]*100,1), "%"),
+       x=paste0("PC3: ", round(ft_var_explained[3]*100,1), "%")) +
+  theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```

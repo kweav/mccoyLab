@@ -51,20 +51,43 @@ data_long_logged_cf <- logged_cf %>%
   pivot_longer(colnames(logged_cf)) %>% 
   as.data.frame()
 with_batch_lcf <- left_join(data_long_logged_cf, meta[,c("name", "cDNA_RT_Date", "Sequencing_Date", "Pregnant")], by="name")
-ggplot(data_long_logged_cf, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank())
+ggplot(data_long_logged_cf, aes(x=value, col=name)) + geom_density(alpha=0.2) + theme_bw() + theme(legend.position = "none", panel.background = element_blank(), panel.grid = element_blank()) + xlab("log2(adj count + 1)")
 ```
 
 ```{r colorbyoutcome_corrected}
-ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("log2(adj count + 1)")
 ```
 
 ```{r facetbycdna_corrected}
-ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date)
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~cDNA_RT_Date) + xlab("log2(adj count + 1)")
 ```
 
 ```{r facetbyseq_corrected}
-ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date)
+ggplot(with_batch_lcf, aes(x=value, group_by = name, col=as.factor(Pregnant))) + geom_density(alpha=0.2) + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + facet_wrap(~Sequencing_Date) + xlab("log2(adj count + 1)")
 ```
+
+```{r clusterbatches}
+library(pheatmap)
+counts_lib_norm <- sweep(counts_filter, 2, colSums(counts_filter), `/`)
+averaged_batches <- cbind(sapply(1:20, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:20)
+colnames(batchDistMatrix) <- paste0("batch", 1:20)
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists, angle_col = 45)
+
+meta[which(meta$cDNA_RT_Date == 20), "cDNA_RT_Date"] <-17
+meta$cDNA_RT_Date <- factor(meta$cDNA_RT_Date, levels = 1:19)
+
+counts_lib_norm <- sweep(counts_filter, 2, colSums(counts_filter), `/`)
+averaged_batches <- cbind(sapply(1:19, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:19)
+colnames(batchDistMatrix) <- paste0("batch", 1:19)
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists, angle_col = 45)
+```
+
 ```{r pca_corrected}
 pca_res_cf <- prcomp(t(counts_filter))
 var_explained_cf <- pca_res_cf$sdev^2/sum(pca_res_cf$sdev^2)
