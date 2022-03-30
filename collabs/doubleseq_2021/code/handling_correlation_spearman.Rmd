@@ -164,6 +164,53 @@ g1 + geom_point(data = subset(cordf_spearman, sibidwnum != 'nonsib_NA'), positio
 g1 + geom_point(data = subset(cordf_spearman, sibidwnum != 'nonsib_NA'), position = position_jitter(width = .2, height=0), aes(color=cycle, shape=atleastoneimplant)) + scale_color_discrete(name = "Same Cycle?") + scale_shape_discrete(name = "At least one\nsuccessful implantation?")
 
 ```
+```{r}
+kruskal.test(cor_tpm ~ sibidwnum, data=cordf_spearman)
+library(FSA)
+dt_res <- dunnTest(cor_tpm ~ sibidwnum, data=cordf_spearman)
+pairwise.wilcox.test(cordf_spearman$cor_tpm,
+                          cordf_spearman$sibidwnum,
+                          p.adjust.method="none")
+
+dt_res
+```
+```{r}
+kruskal.test(cor_tpm ~ cycle, data=cordf_spearman)
+dunnTest(cor_tpm ~ cycle, data = cordf_spearman, method="none")
+
+```
+
+
+```{r}
+sibidoi = "sib_2"
+subset_data <- cordf_spearman[which(cordf_spearman$sibidwnum == sibidoi),]
+kruskal.test(cor_tpm ~ cycle, data=subset_data)
+dunnTest(cor_tpm ~ cycle, data=subset_data, method="none")
+pairwise.wilcox.test(subset_data$cor_tpm,
+                     subset_data$cycle,
+                    p.adjust.method="none")
+```
+
+
+```{r}
+sibidoi = "sib_3"
+subset_data <- cordf_spearman[which(cordf_spearman$sibidwnum == sibidoi),]
+kruskal.test(cor_tpm ~ cycle, data=subset_data)
+dunnTest(cor_tpm ~ cycle, data=subset_data, method="none")
+pairwise.wilcox.test(subset_data$cor_tpm,
+                     subset_data$cycle,
+                    p.adjust.method="none")
+```
+```{r}
+sibidoi = "sib_4"
+subset_data <- cordf_spearman[which(cordf_spearman$sibidwnum == sibidoi),]
+kruskal.test(cor_tpm ~ cycle, data=subset_data)
+dunnTest(cor_tpm ~ cycle, data=subset_data, method="none")
+pairwise.wilcox.test(subset_data$cor_tpm,
+                     subset_data$cycle,
+                    p.adjust.method="none")
+```
+
 
 ```{r}
 rowCol <- expand.grid(rownames(cor_mat_tpm), colnames(cor_mat_tpm))
@@ -193,10 +240,60 @@ sib_y_vals <- rawTPMvals[,"202-A-7-L"]
 ```
 
 ```{r}
+library(ggpubr)
 toplotdf <- data.frame(x = c(nonsib_x_vals, sib_x_vals),
                        y = c(nonsib_y_vals, sib_y_vals),
                        sibid = c(rep("Non-Siblings", nrow(rawTPMvals)), rep("Siblings", nrow(rawTPMvals))))
 
-ggplot(toplotdf, aes(x=x+1, y=y+1)) + geom_point(alpha=0.2) + facet_wrap(~sibid) + scale_y_log10() + scale_x_log10() + geom_smooth(method="lm", se=FALSE) + ylab("log10(TPM+1) Sample2") + xlab("log10(TPM+1) Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+g1 <- ggplot(toplotdf, aes(x=x+1, y=y+1)) + geom_point(alpha=0.2) + facet_wrap(~sibid) + scale_y_log10() + scale_x_log10() + geom_smooth(method="lm", se=FALSE) + ylab("log10(TPM+1) Sample2") + xlab("log10(TPM+1) Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+
+g1
+
+#adding pearson's r
+g1 + stat_cor()
+
+#adding spearman's rho but feels dishonest
+g1 + stat_cor(method="spearman", cor.coef.name = "rho")
 ```
 
+```{r}
+toplotdf <- toplotdf %>% mutate(RX=rank(x), 
+                                RY=rank(y),
+                                scaledRX=scales::rescale(RX, to=range(x)),
+                                scaledRY=scales::rescale(RY, to=range(y)))
+
+ggplot(toplotdf, aes(x=scaledRX, y=scaledRY)) + geom_point(alpha=0.5) + facet_wrap(~sibid) + #scale_y_log10() + scale_x_log10() +
+  geom_smooth(method="lm", se=FALSE, aes(scaledRX, scaledRY)) + ylab("Ranked TPM Sample2") + xlab("Ranked TPM Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + stat_cor(method="spearman", cor.coef.name = "rho")
+```
+
+
+```{r}
+
+toplotdf_nonsib <- data.frame(x = nonsib_x_vals,
+                              y = nonsib_y_vals,
+                              sibid = "Non-Siblings") %>% 
+  mutate(RX= rank(x), RY = rank(y),
+         scaledRX = scales::rescale(RX, to=range(x)),
+         scaledRY = scales::rescale(RY, to=range(y)))
+
+toplotdf_sib <- data.frame(x = sib_x_vals,
+                            y = sib_y_vals,
+                            sibid = "Siblings") %>% 
+  mutate(RX = rank(x), RY=rank(y),
+         scaledRX = scales::rescale(RX, to=range(x)),
+         scaledRY = scales::rescale(RY, to=range(y)))
+
+toplotdfnew <- rbind(toplotdf_nonsib, toplotdf_sib)
+
+ggplot(toplotdfnew, aes(x=scaledRX, y=scaledRY)) + geom_point(alpha=0.5) + facet_wrap(~sibid) + #scale_y_log10() + scale_x_log10() +
+  geom_smooth(method="lm", se=FALSE, aes(scaledRX, scaledRY)) + ylab("Ranked TPM Sample2") + xlab("Ranked TPM Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + stat_cor(method="spearman", cor.coef.name = "rho")
+
+ggplot(toplotdfnew, aes(x=scaledRX, y=scaledRY)) + geom_point(alpha=0.5) + facet_wrap(~sibid, scales = 'free_y') + #scale_y_log10() + scale_x_log10() +
+  geom_smooth(method="lm", se=FALSE, aes(scaledRX, scaledRY)) + ylab("Ranked TPM Sample2") + xlab("Ranked TPM Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + stat_cor(method="spearman", cor.coef.name = "rho")
+```
+
+```{r}
+ggplot(toplotdfnew, aes(x=RX, y=RY)) + geom_point(alpha=0.5) + facet_wrap(~sibid) + #scale_y_log10() + scale_x_log10() +
+  geom_smooth(method="lm", se=FALSE, aes(RX, RY)) + ylab("Ranked TPM Sample2") + xlab("Ranked TPM Sample1") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + stat_cor(method="spearman", cor.coef.name = "rho")
+
+```
