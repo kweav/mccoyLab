@@ -1,0 +1,393 @@
+---
+title: "plot_exp_by_delabelsygroups"
+author: "Kate Weaver"
+date: "4/7/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, warning=FALSE, message=FALSE, echo = FALSE}
+library(edgeR)
+library(tidyverse)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+library(patchwork)
+library(ggbeeswarm)
+```
+
+```{r load_delabels, echo=FALSE}
+load("~/mccoyLab/collabs/doubleseq_2021/code/batch_correct/combatseq_corrected_withshrinkage.RData")
+
+dgeFullData <- DGEList(corrected_jg_rts)
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+
+genesoi <- read.csv("~/mccoyLab/collabs/doubleseq_2021/dif_expression_results/results_allgenes_trainSPA_dupCor_batchcorrected.egaf_outcome.csv", row.names=1)
+```
+
+```{r subset_exp, echo=FALSE}
+subset_TMM <- TMMFullData$counts[rownames(genesoi),] %>% as.data.frame()
+subset_TMM$genefilter <- "Assessed in DE"
+subset_TMM <- merge(subset_TMM, genesoi, by=0, all=TRUE, check.names = FALSE) %>% set_rownames(.$Row.names) %>% dplyr::select(-Row.names)
+
+rest_TMM <- TMMFullData$counts[setdiff(rownames(TMMFullData$counts),rownames(genesoi)),] %>% as.data.frame()
+rest_TMM$genefilter <- "Filtered out prior to DE"
+for (colname in colnames(genesoi)){
+  rest_TMM[,colname] <- NA
+}
+
+```
+
+```{r load_meta, echo=FALSE}
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20220308.csv", row.names=1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#subsetting meta data to just the samples with sequencing data 
+remove <- setdiff(rownames(meta), colnames(corrected_jg_rts))
+if (length(which(rownames(meta) %in%  remove)) > 0){
+  meta <- meta[-which(rownames(meta) %in%  remove),]
+}
+
+meta$sample <- rownames(meta)
+```
+
+```{r make_long_tmm, echo=FALSE}
+allgenes <- rbind(subset_TMM, rest_TMM)
+allgenes$gene_name <- rownames(allgenes)
+allgenes$delabelqval <- paste0(allgenes$delabel, "\n(q-val: ", sprintf("%1.2f", allgenes$adj.P.Val), ")")
+allTMM_long <- pivot_longer(allgenes, cols=rownames(meta), names_to = "sample", values_to = "TMM")
+```
+
+```{r combine_with_meta, echo=FALSE}
+allTMM_long_annot <- merge(allTMM_long, meta[,c("sample", "Embryo_grade_at_freezing", "set", "Pregnant")], by="sample")
+```
+
+## Plot 1: Expression of all genes across all samples
+
+```{r plot1, echo=FALSE}
+all_genes <- ggplot(allTMM_long_annot, aes(x="all genes", y=TMM + 1)) + geom_violin() + 
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  scale_x_discrete(limits = c("all genes"), labels=c(paste0("n=",nrow(allTMM_long_annot),"\n", length(rownames(meta)), " samples and " , length(rownames(allgenes))," genes"))) + xlab("")
+
+all_genes
+```
+
+## Plot 2: Expression of all genes across all samples, splitting genes into two groups based on filtering prior to DE
+  * (A) those which were filtered out prior to differential expression analysis because they had low mean expression across samples (leaving them in the data would decrease the power to identify differentially expressed genes -- [see here for a description](https://docs.google.com/document/d/1tXxy3q4yHtB3VQ4bV0TAwJ_cmcbxXTdk9cnN0x4bP-o/edit#bookmark=id.ljuz75se4fyx))
+  * (B) those which were assessed in differential expression analysis
+
+```{r plot2, echo=FALSE}
+
+sep_by_filter <- ggplot(allTMM_long_annot, aes(x=genefilter, y=TMM + 1)) + geom_violin() + 
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  scale_x_discrete(limits = c("Filtered out prior to DE", "Assessed in DE"), labels=c(paste0("Filtered out prior to DE\nn=",sum(allTMM_long_annot$genefilter == "Filtered out prior to DE"),"\n", length(rownames(meta)), " samples and " , length(rownames(rest_TMM))," genes"), paste0("Assessed in DE\nn=",sum(allTMM_long_annot$genefilter == "Assessed in DE"),"\n", length(rownames(meta)), " samples and " , length(rownames(subset_TMM))," genes"))) + xlab("")
+
+sep_by_filter
+```
+
+## Plot 3: Focusing on the expression across all samples of just the genes which were assessed in differential expression analysis, split into 3 groups
+  * (A) Those not differentially expressed
+  * (B) Those upregulated in cases of implantation
+  * (C) Those downregulated in cases of immplantation
+  
+Note that differential expression analysis was performed with just the training data while all samples are plotted here.
+
+```{r plot3, echo=FALSE}
+allTMM_long_annot_DE = allTMM_long_annot[which(allTMM_long_annot$genefilter == "Assessed in DE"),]
+sep_by_de <- ggplot(allTMM_long_annot_DE,
+                    aes(x=diffexpressed, y=TMM+1)) + geom_violin() +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  scale_x_discrete(limits = c("NO", "UP", "DOWN"), labels=c(paste0("Not Differentially Expressed\nn=",sum(allTMM_long_annot_DE$diffexpressed == "NO"),"\n", length(rownames(meta)), " samples and " , sum(subset_TMM$diffexpressed == "NO")," genes"), paste0("Upregulated in implantation cases\nn=",sum(allTMM_long_annot_DE$diffexpressed == "UP"),"\n", length(rownames(meta)), " samples and " , sum(subset_TMM$diffexpressed == "UP")," genes"), paste0("Downregulated in implantation cases\nn=", sum(allTMM_long_annot_DE$diffexpressed == "DOWN"), "\n", length(rownames(meta)), " samples and ", sum(subset_TMM$diffexpressed == "DOWN"), " genes"))) + xlab("")
+
+sep_by_de
+```
+
+## Plot 4 (Violin): Focusing on just the upregulated genes, specifically for each gene, distribution of expression for samples which successfully implanted vs those that did not implant
+
+```{r plot4, echo=FALSE}
+
+de_upv <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP"),],
+                    aes(x=Pregnant, y=TMM+1)) + geom_violin(aes(fill=Pregnant)) + facet_wrap(~delabelqval) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 5)) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) + 
+  ggtitle("Upregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_upv
+```
+
+## Plot 5 (Beeswarm): Focusing on just the upregulated genes, specifically for each gene, distribution of expression
+* genes separated on x-axis
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color
+* shape of points reflects embryo grade at freezing
+* Don't love that it's actually difficult to separate the genes from each other, specifically in the more lowly expressed samples section with this visualization. Also difficult to see the differences between the two implantation groups based on color alone
+
+```{r plot5_bee, echo = FALSE}
+de_upb <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP"),],
+                    aes(x=delabel, y=TMM+1)) + geom_beeswarm(cex=0.2, aes(color=Pregnant, shape=Embryo_grade_at_freezing)) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_text(angle=90)) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  scale_shape_discrete(name = "Embryo grade") +
+  ggtitle("Upregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_upb
+```
+
+## Plot 6 (Beeswarm, faceted): Focusing on just the upregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* shape of points reflects embryo grade at freezing
+* Also difficult to see the differences between the two implantation groups -- not sure how to add median lines, but that would be great
+
+```{r plotupbeefacet, echo=FALSE}
+de_upbf <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval) + geom_beeswarm(aes(color=Pregnant, shape=Embryo_grade_at_freezing)) +
+  stat_summary(fun=median, geom="point", aes(group=delabelqval, x=as.factor(Pregnant))) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 5)) +
+  theme(axis.text.x = element_blank()) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  scale_shape_discrete(name = "Embryo grade") +
+  ggtitle("Upregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_upbf
+```
+
+## Plot 7 (Beeswarm, faceted, no embryo grade): Focusing on just the upregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Also difficult to see the differences between the two implantation groups -- not sure how to add median lines, but that would be great
+
+```{r upbeenoegaf, echo=FALSE}
+
+de_upbfne <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval) + geom_beeswarm(aes(color=Pregnant)) +
+  stat_summary(fun=median, geom="point", aes(group=delabelqval, x=as.factor(Pregnant))) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 5)) +
+  theme(axis.text.x = element_blank()) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Upregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_upbfne
+```
+
+## Plot 8 (Boxplot): Focusing on just the upregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Using the boxplot to visualize the quartiles and medians of the two groups
+* Medians sometimes go down from no implantation to implantation -- this could be due to: visualizing all data, not just training data; not controlling for embryo grade which de analysis did do; or use of the very permissive q-value (0.25); de analysis comparing more than medians
+
+```{r plot8box, echo=FALSE}
+
+de_upbox <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval, nrow=4) + geom_boxplot(aes(fill = Pregnant)) +
+    stat_summary(fun=median, geom='text', aes(label=sprintf("%1.2f", ..y..), color=Pregnant),
+               position=position_nudge(y=2.75), size=3.25, show.legend = FALSE, alpha = 5) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 5)) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Upregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_upbox
+
+```
+
+## Plot 9 (Boxplot, just training data): Focusing on just the upregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Using the boxplot to visualize the quartiles and medians of the two groups
+* Only using the training samples since those were the only samples used in the differential expression analysis. The idea with this was that perhaps separations in medians might be more stark than compared to looking at all the samples, or maybe some of the medians wouldn't go down
+* some medians still go down
+
+```{r justtrainup, echo=FALSE}
+
+de_upboxtrain <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "UP" & allTMM_long_annot_DE$set == "train"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval, nrow=4) + geom_boxplot(aes(fill = Pregnant)) +
+  stat_summary(fun=median, geom='text', aes(label=sprintf("%1.2f", ..y..), color=Pregnant),
+               position=position_nudge(y=2.75), size=3.25, show.legend = FALSE, alpha = 5) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 5)) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Upregulated Genes in Cases of Implantation (only training data)") +
+  xlab(paste0("n=",sum(meta$set == "train"), " training samples total for each gene\n" , sum(meta$Pregnant == 0 & meta$set == "train"), " no implantation\n", sum(meta$Pregnant == 1 & meta$set == "train"), " successful implantation"))
+
+de_upboxtrain
+
+```
+
+## Plot 10 (Violin): Focusing on just the downregulated genes, specifically for each gene, distribution of expression for samples which successfully implanted vs those that did not implant
+
+```{r plot10, echo=FALSE}
+de_downv <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN"),],
+                    aes(x=Pregnant, y=TMM+1)) + geom_violin(aes(fill=Pregnant)) + facet_wrap(~delabelqval) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(strip.text.x = element_text(size = 6)) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) + 
+  ggtitle("Downregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_downv
+```
+
+## Plot 11 (Beeswarm): Focusing on just the downregulated genes, specifically for each gene, distribution of expression
+* genes separated on x-axis
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color
+* shape of points reflects embryo grade at freezing
+* Don't love that it's actually difficult to separate the genes from each other, specifically in the more lowly expressed samples section with this visualization. Also difficult to see the differences between the two implantation groups based on color alone
+
+```{r plot11_bee, echo=FALSE}
+de_downb <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN"),],
+                    aes(x=delabel, y=TMM+1)) + geom_beeswarm(cex=0.8, aes(color=Pregnant, shape=Embryo_grade_at_freezing)) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_text(angle=90)) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  scale_shape_discrete(name = "Embryo grade") +
+  ggtitle("Downregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_downb
+```
+
+## Plot 12 (Beeswarm, faceted): Focusing on just the downregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* shape of points reflects embryo grade at freezing
+* Also difficult to see the differences between the two implantation groups -- so I added points for the medians
+
+```{r plotdownbeefacet, echo=FALSE}
+de_downbf <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval) + geom_beeswarm(aes(color=Pregnant, shape=Embryo_grade_at_freezing)) +
+  stat_summary(fun=median, geom="point", aes(group=delabelqval, x=as.factor(Pregnant))) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_blank()) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  scale_shape_discrete(name = "Embryo grade") +
+  ggtitle("Downregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_downbf
+```
+
+## Plot 13 (Beeswarm, faceted, no embryo grade): Focusing on just the downregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Also difficult to see the differences between the two implantation groups so I added points for the medians
+
+```{r downbeenoegaf, echo=FALSE}
+
+de_downbfne <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval) + geom_beeswarm(aes(color=Pregnant)) +
+  stat_summary(fun=median, geom="point", aes(group=delabelqval, x=as.factor(Pregnant))) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_blank()) +
+  scale_color_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Downregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_downbfne
+```
+
+## Plot 14 (Boxplot): Focusing on just the downregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Using the boxplot to visualize the quartiles and medians of the two groups
+
+```{r plot14, echo=FALSE}
+
+de_downbox <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval, nrow=3) + geom_boxplot(aes(fill = Pregnant)) +
+  stat_summary(fun=median, geom='text', aes(label=sprintf("%1.2f", ..y..), color=Pregnant),
+               position=position_nudge(y=2.75), size=3.25, show.legend = FALSE, alpha = 5) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Downregulated Genes in Cases of Implantation") +
+  xlab(paste0("n=",nrow(meta), " samples total each gene\n" , sum(meta$Pregnant == 0), " no implantation\n", sum(meta$Pregnant == 1), " successful implantation"))
+
+de_downbox
+
+```
+
+## Plot 15 (Boxplot, just training data): Focusing on just the downregulated genes, specifically for each gene, distribution of expression
+* genes separated by facets to better separate them from one another
+* distribution of expression for samples which successfully implanted vs those that did not implant is visualized, separating using color and position on the x-axis
+* Using the boxplot to visualize the quartiles and medians of the two groups
+* Only using the training samples since those were the only samples used in the differential expression analysis. The idea with this was that perhaps separations in medians might be more stark than compared to looking at all the samples
+
+```{r justtraindown, echo=FALSE}
+
+de_downboxtrain <- ggplot(allTMM_long_annot_DE[which(allTMM_long_annot_DE$diffexpressed == "DOWN" & allTMM_long_annot_DE$set == "train"),],
+                    aes(x=Pregnant, y=TMM+1))  + facet_wrap(~delabelqval, nrow=3) + geom_boxplot(aes(fill = Pregnant)) +
+  stat_summary(fun=median, geom='text', aes(label=sprintf("%1.2f", ..y..), color=Pregnant),
+               position=position_nudge(y=2.75), size=3.25, show.legend = FALSE, alpha = 5) +
+  scale_y_log10() + 
+  ylab("log10(TMM + 1)") +
+  theme_bw() +
+  theme(panel.background = element_blank(), panel.grid = element_blank()) +
+  theme(axis.text.x = element_blank()) +
+  scale_fill_discrete(name = "Implantation?", limits = c("0", "1"), labels=c("No", "Yes")) +
+  ggtitle("Downregulated Genes in Cases of Implantation (only training data)") +
+  xlab(paste0("n=",sum(meta$set == "train"), " samples total each gene\n" , sum(meta$Pregnant == 0 & meta$set == "train"), " no implantation\n", sum(meta$Pregnant == 1 & meta$set == "train"), " successful implantation"))
+
+de_downboxtrain
+
+```
+
