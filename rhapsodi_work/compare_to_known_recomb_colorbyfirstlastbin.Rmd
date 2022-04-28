@@ -1,0 +1,208 @@
+---
+title: "compare_to_known_recomb"
+author: "Kate Weaver"
+date: "4/27/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+```
+
+Paternal map is from [Halldorsson et al 2019](https://www.science.org/doi/suppl/10.1126/science.aau1043)
+
+```{r}
+window_size <- 1e6
+
+loc_to_window <- function(loc, window_size){
+  window <- ceiling(loc/window_size)
+  return(window)
+}
+
+load("~/mccoyLab_withOthers/transmission-distortion/plotting/supp_recomb/recomb_map_meltdf.Rdata") #this is melted_df
+
+
+paternal_map <- read.delim("~/Downloads/aau1043_datas1", skip=7)
+paternal_map$interval_size <- paternal_map$End - paternal_map$Begin
+paternal_map$midpoint <- (paternal_map$Begin + paternal_map$End) /2
+paternal_map$bin <- loc_to_window(paternal_map$midpoint, window_size) 
+paternal_map_wa <- paternal_map %>% 
+  group_by(Chr, bin) %>% 
+  summarize(rate = weighted.mean(cMperMb, interval_size/window_size)) %>% 
+  `colnames<-`(c("chr", "bin", "rate"))
+
+merged_df <- merge(melted_df, paternal_map_wa, by=c("chr", "bin"), all=TRUE) %>% 
+  replace_na(list(rate=0))
+
+```
+
+## no color
+
+```{r}
+ggplot(merged_df, aes(x=rate, y=count)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  stat_cor()
+
+ggplot(merged_df, aes(x=rate, y=count)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed)
+
+```
+
+## naive approach where we just color numerical first and last bins
+
+### same color
+
+```{r}
+bins_to_color <- melted_df %>% 
+  group_by(chr) %>% 
+  summarize(max(bin)) %>% add_column(color="blue") %>% `colnames<-`(c("chr", "bin", "color")) %>% 
+  rbind(data.frame(chr=paste0("chr",1:22), bin=1, color="blue"))
+
+merged_df_sc <- merge(merged_df, bins_to_color, by=c("chr", "bin"), all=TRUE) %>% 
+  replace_na(list(color="black", rate = 0))
+```
+
+```{r}
+ggplot(merged_df_sc, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "blue"), labels = c('not first or last bin', 'first or last bin')) +
+  stat_cor()
+
+ggplot(merged_df_sc, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "blue"), labels = c('not first or last bin', 'first or last bin'))
+```
+
+
+### different first and last color
+
+```{r}
+bins_to_color <- melted_df %>% 
+  group_by(chr) %>% 
+  summarize(max(bin)) %>% `colnames<-`(c("chr", "bin"))
+bins_to_color$color <- "blue"
+bins_to_color <- bins_to_color %>% 
+  rbind(data.frame(chr=paste0("chr",1:22), bin=1, color="purple"))
+
+merged_df_dc <- merge(merged_df, bins_to_color, by=c("chr", "bin"), all=TRUE) %>% 
+  replace_na(list(color="black", freq=0))
+```
+
+
+```{r}
+ggplot(merged_df_dc, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin')) +
+  stat_cor()
+
+ggplot(merged_df_dc, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin'))
+
+```
+
+## thorough approach where we color literal/observed first and last bins from the data 
+
+```{r}
+bins_to_color <- read.csv("/Users/kateweaver/mccoyLab/rhapsodi_work/filtered_data_specific_first_last_bins.csv", row.names=1) %>% `colnames<-`(c("bin", "freq", "color", "chr"))
+
+merged_df <- merge(melted_df, paternal_map_wa, by=c("chr", "bin"), all=TRUE) %>% 
+  replace_na(list(rate=0)) %>%
+  mutate(across(chr, gsub, pattern="chr", replacement=""))
+
+merged_df <- merge(merged_df, bins_to_color, by=c("chr", "bin"), all=TRUE) %>% 
+  replace_na(list(color="black", freq=0))
+```
+
+
+### just color, no change in size based on frequency of being a first or last bin
+
+#### same color
+
+haven't figured this out without changing the input dataframe yet
+
+
+```{r, eval=FALSE, echo = FALSE}
+ggplot(merged_df, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin',limits = c("black", "blue", "purple"), breaks = c("black", "blue", "blue"), values=c("black", "blue", "blue"), labels = c('not first or last bin', 'first or last bin', 'first or last bin')) +
+  stat_cor()
+
+ggplot(merged_df, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin',limits = c("black", "blue", "purple"), breaks = c("black", "blue", "blue"), values=c("black", "blue", "blue"), labels = c('not first or last bin', 'first or last bin', 'first or last bin'))
+```
+
+#### different color
+
+```{r}
+ggplot(merged_df, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin')) + 
+  stat_cor()
+
+ggplot(merged_df, aes(x=rate, y=count, color=color)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin'))
+
+```
+
+
+### change in size based on frequency of being a first or last bin
+
+#### same color
+
+haven't figured this out without changing the input dataframe yet
+
+```{r, eval = FALSE, echo = FALSE}
+ggplot(merged_df, aes(x=rate, y=count, color=color, size=freq)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin',limits = c("black", "blue", "purple"), breaks = c("black", "blue", "blue"), values=c("black", "blue", "blue"), labels = c('not first or last bin', 'first or last bin', 'first or last bin'))
+
+ggplot(merged_df, aes(x=rate, y=count, color=color, size=freq)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin',limits = c("black", "blue", "purple"), breaks = c("black", "blue", "blue"), values=c("black", "blue", "blue"), labels = c('not first or last bin', 'first or last bin', 'first or last bin'))
+```
+
+
+#### different color
+
+```{r}
+ggplot(merged_df, aes(x=rate, y=count, color=color, size=freq)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin'))
+
+ggplot(merged_df, aes(x=rate, y=count, color=color, size=freq)) + geom_point(alpha=0.5) +
+  theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + 
+  xlab("Published male-specific recombination rate (cM/Mb)") + ylab("Inferred number of crossovers per genomic bin from Sperm-seq") +
+  facet_wrap(~chr_num, nrow=floor(22/4), scales="free_x", shrink = FALSE, labeller=label_parsed) +
+  scale_color_manual(name = 'chromosome  bin', values = c("black", "purple", "blue"), labels = c('not first or last bin', 'first bin', 'last bin'))
+```
+
+
