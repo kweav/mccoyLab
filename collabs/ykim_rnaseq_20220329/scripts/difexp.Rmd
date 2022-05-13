@@ -1,0 +1,188 @@
+---
+title: "difexp"
+author: "Kate Weaver"
+date: "5/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(SummarizedExperiment)
+library(ggplot2)
+library(rtracklayer)
+library(edgeR)
+library(tidyverse)
+library(ggpubr)
+library(DESeq2)
+library(ggrepel)
+```
+
+```{r load_se}
+load("~/mccoyLab/collabs/ykim_rnaseq_20220329/results/ykim_rnaseq_20220329_summarized_experiment.Rdata")
+counts <- as.matrix(assays(seAll)$counts)
+for (col in 1:ncol(counts)){
+  colnames(counts)[col] <- strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
+}
+colnames(counts)
+```
+
+```{r metadata}
+metadf <- data.frame(samples = c(paste0("MSH5-V5-13A-", 1:3), paste0("MSH5-V5-", 1:3), paste0("MSH5-V5-Trunc4-", 1:3), paste0("N2-", 1:3)),
+                     genotype = c(rep("MSH5-V5-13A", 3), rep("MSH5-V5",3), rep("MSH5-V5-Trunc4", 3), rep("N2", 3)),
+                     full_genotype_colors = c(rep("green", 3), rep("blue", 3), rep("orange", 3), "purple", "brown", "pink"),
+                     genotype_colors = c(rep("green", 3), rep("blue", 3), rep("orange", 3), rep("purple", 3)),
+                     replicate = rep(1:3, 4),
+                     simplified_genotype1 = c(rep("experimental-13A", 3), rep("control", 3), rep("experimental-Trunc4", 3), rep("control",3)),
+                     simplified_genotype2 = c(rep("experimental", 3), rep("control",3), rep("experimental",3), rep("control",3)),
+                     simplified_genotype3 = c(rep("experimental", 3), rep("control-V5",3), rep("experimental",3), rep("control-N2",3)),
+                     simplified_genotype2_colors = c(rep("orange", 3), rep("blue", 3), rep("orange",3), rep("blue",3)))
+```
+
+
+```{r load_subset_gtf}
+gtf <- rtracklayer::import("~/genomes/WBcel235/Caenorhabditis_elegans.WBcel235.97.gtf") %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type=="gene") %>% 
+  dplyr::select(gene_id, gene_name, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+
+gene_table <- gtf[match(rownames(counts), gtf$ensembl_gene_id),]
+gene_table <- gene_table[gene_table$chromosome_name %in% c("I", "II","III", "IV", "V", "X"),]
+counts <- counts[gene_table$ensembl_gene_id,]
+```
+
+## compute TMM and TPM from counts
+
+```{r TPM_function}
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+```
+
+```{r filter_lowlyexpressed}
+dgeFullData <- DGEList(counts, group=as.factor(metadf$genotype))
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")$counts
+TPMFullData <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+```
+
+## removing N2 from samples because of PCA
+
+```{r}
+metadf_non2 <- metadf[which(metadf$genotype!="N2"),] %>% mutate_at(vars(genotype, simplified_genotype2, replicate), factor)
+counts_non2 <- counts[,1:9]
+TMMFull_non2 <- TMMFullData[,1:9]
+TPMFull_non2 <- TPMFullData[,1:9]
+
+tokeep <- rowSums(counts_non2) > 1
+logdata_non2 <- log2(counts_non2 + 1)
+tokeep_stringent <- rowMeans(logdata_non2) > 3
+counts_non2_filtered = counts_non2[tokeep, ]
+TMMFiltData_non2 <- TMMFull_non2[tokeep,]
+TPMFiltData_non2 <- TPMFull_non2[tokeep,]
+gene_table_filtered <- gene_table[tokeep,]
+
+
+counts_non2_stringent <- counts_non2[tokeep_stringent,]
+TMMStringent_non2 <- TMMFull_non2[tokeep_stringent,]
+TPMStringent_non2 <- TPMFull_non2[tokeep_stringent,]
+```
+
+## genotype specific comparison vs control; no replicate
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ genotype)
+vsd <- vst(dds, blind=FALSE)
+dds <- DESeq(dds)
+```
+
+```{r}
+res_trunc <- results(dds, name = "genotype_MSH5.V5.Trunc4_vs_MSH5.V5") %>% as.data.frame()
+
+res_13A <- results(dds, name = "genotype_MSH5.V5.13A_vs_MSH5.V5") %>% as.data.frame()
+
+```
+
+## genotype specific comparison vs control; replicate covariate
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ replicate + genotype)
+dds <- DESeq(dds, test="LRT", reduced=~genotype)
+
+```
+
+```{r}
+res.05 <- subset(res,padj<0.05) %>% as.data.frame()
+res$diffexpressed <- "NO"
+res$diffexpressed[res$log2FoldChange>2 & res$padj<0.05] <- "UP"
+res$diffexpressed[res$log2FoldChange< -2 & res$padj<0.05] <- "DOWN"
+
+g <- ggplot(data=res, aes(x=log2FoldChange, y=-log10(padj),col=diffexpressed)) + geom_point(size=0.5) + theme_classic()
+g <- g + theme(panel.grid.major = element_line(color = "gray70", size = 0.3, linetype = 3)) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
+g1 <- g + scale_color_manual(values=c("blue", "gray", "red"))
+g1
+```
+
+```{r}
+res$symbol <- gene_table$gene_name[match(rownames(res), gene_table$ensembl_gene_id)]
+res$delabel <- NA
+res$delabel[res$diffexpressed != "NO"] <- res$symbol[res$diffexpressed != "NO"]
+
+gl <- ggplot(res, aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed, label=delabel)) + geom_point() +
+  theme_minimal() + geom_text_repel() + scale_color_manual(values=c("blue", "black", "red")) + geom_vline(xintercept=c(-2, 2), col="red") + geom_hline(yintercept=-log10(0.05), col="red")
+
+gl
+
+```
+
+## basic comparison of mutated (trunc or 13A) vs control (just v5 tag); no replicate
+
+```{r}
+dds2 <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ simplified_genotype2)
+vsd2 <- vst(dds2, blind=FALSE)
+dds2 <- DESeq(dds2)
+res2 <- results(dds2) %>% as.data.frame()
+```
+
+```{r}
+res2.05 <- subset(res2,padj<0.05) %>% as.data.frame()
+res2$diffexpressed <- "NO"
+res2$diffexpressed[res2$log2FoldChange>2 & res2$padj<0.05] <- "UP"
+res2$diffexpressed[res2$log2FoldChange< -2 & res2$padj<0.05] <- "DOWN"
+
+g <- ggplot(data=res2, aes(x=log2FoldChange, y=-log10(padj),col=diffexpressed)) + geom_point(size=0.5) + theme_classic()
+g <- g + theme(panel.grid.major = element_line(color = "gray70", size = 0.3, linetype = 3)) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
+g1 <- g + scale_color_manual(values=c("blue", "gray", "red"))
+g1
+```
+
+```{r}
+res2$symbol <- gene_table$gene_name[match(rownames(res2), gene_table$ensembl_gene_id)]
+res2$delabel <- NA
+res2$delabel[res2$diffexpressed != "NO"] <- res2$symbol[res2$diffexpressed != "NO"]
+
+gl <- ggplot(res2, aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed, label=delabel)) + geom_point() +
+  theme_minimal() + geom_text_repel() + scale_color_manual(values=c("blue", "gray", "red")) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
+
+gl
+
+```
+
+### note on up vs down-regulated
+
+* Up is upregulated in experimental compared to control
+* Down is downregulated in experimental compared to control
+
+```{r}
+res2.05 <- subset(res2, padj<0.05) %>% arrange(desc(abs(log2FoldChange)))
+
+write.csv(res2.05, "~/mccoyLab/collabs/ykim_rnaseq_20220329/prelim_expvscontrol.csv")
+
+```
