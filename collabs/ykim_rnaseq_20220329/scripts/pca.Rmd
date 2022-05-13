@@ -5,6 +5,8 @@ date: "4/12/2022"
 output: html_document
 ---
 
+## Exploratory Data Analysis of MSH-5 RNA-seq experiment
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -22,7 +24,7 @@ library(ggrepel)
 ```
 
 ```{r load_se}
-load("~/mccoyLab/collabs/ykim_rnaseq_20220329/ykim_rnaseq_20220329_summarized_experiment.Rdata")
+load("~/mccoyLab/collabs/ykim_rnaseq_20220329/results/ykim_rnaseq_20220329_summarized_experiment.Rdata")
 counts <- as.matrix(assays(seAll)$counts)
 for (col in 1:ncol(counts)){
   colnames(counts)[col] <- strsplit(sub("Aligned.sortedByCoord.out.bam", "", colnames(counts)[col]), "_")[[1]][1]
@@ -57,7 +59,7 @@ gene_table <- gene_table[gene_table$chromosome_name %in% c("I", "II","III", "IV"
 counts <- counts[gene_table$ensembl_gene_id,]
 ```
 
-## Density traces of sample expression
+### Density traces of sample expression
 
 ```{r traces}
 logdata <- log2(counts +1)
@@ -80,7 +82,7 @@ for (i in 2:ncol(edata)){lines(density(edata[,i]), lwd=3, col=metadf$full_genoty
 legend("topright", c("MSH5-V5-13A", "MSH5-V5", "MSH5-V5-Trunc4", "N2-1", "N2-2", "N2-3") , col=c("green", "blue", "orange", "purple", "brown", "pink"), lwd=3)
 ```
 
-## compute TMM and TPM from counts
+### compute TMM and TPM from counts
 
 ```{r TPM_function}
 #TPM Calculation
@@ -113,7 +115,7 @@ TPMStringent <- TPMFullData[tokeep_stringent,]
 
 ```
 
-## PCA with lightly filtered counts
+### PCA with lightly filtered counts
 
 ```{r pca_counts}
 pca_res_counts <- prcomp(t(counts_filtered))
@@ -169,7 +171,8 @@ pca_res_counts$x %>%
   ggtitle("raw counts PCA colored by total counts in library") + labs(color="")
 
 ```
-## PCA with counts stringently filtered
+
+### PCA with counts stringently filtered
 
 ```{r pca_counts_stringent}
 pca_res_counts <- prcomp(t(counts_stringent))
@@ -216,7 +219,7 @@ pca_res_counts$x %>%
 
 ```
 
-## PCA with lightly filtered TMM
+### PCA with lightly filtered TMM
 
 ```{r pca_tmm}
 pca_res_tmm <- prcomp(t(TMMFiltData))
@@ -292,7 +295,7 @@ pca_res_tmm$x %>%
 
 ```
 
-## PCA with stringently filtered TMM
+### PCA with stringently filtered TMM
 
 ```{r pca_tmm_stringent}
 pca_res_tmm <- prcomp(t(TMMStringent))
@@ -339,7 +342,7 @@ pca_res_tmm$x %>%
 
 ```
 
-## PCA with lightly filtered TPM
+### PCA with lightly filtered TPM
 
 ```{r pca_tpm}
 pca_res_tpm <- prcomp(t(TPMFiltData))
@@ -388,7 +391,7 @@ pca_res_tpm$x %>%
 
 ```
 
-## PCA with stringently filtered TPM
+### PCA with stringently filtered TPM
 
 ```{r pca_tpm_stringent}
 pca_res_tpm <- prcomp(t(TPMStringent))
@@ -426,7 +429,7 @@ pca_res_tpm$x %>%
 
 ```
 
-## removing N2 from samples and repeating PCAs
+## removing N2 from samples 
 
 ```{r}
 metadf_non2 <- metadf[which(metadf$genotype!="N2"),] %>% mutate_at(vars(genotype, simplified_genotype2, replicate), factor)
@@ -448,9 +451,11 @@ TMMStringent_non2 <- TMMFull_non2[tokeep_stringent,]
 TPMStringent_non2 <- TPMFull_non2[tokeep_stringent,]
 ```
 
-### counts based
+### repeating PCAs without n2 samples
 
-#### lite filter
+#### counts based
+
+##### lite filter
 
 ```{r}
 pca_res_counts <- prcomp(t(counts_non2_filtered))
@@ -673,19 +678,6 @@ pca_res_tmm$x %>%
 
 ## compare samples pairwise in scatter plots
 
-```{r scatter_replicates, eval=FALSE}
-#TPM_df <- as.data.frame(t(TPMFiltData)) %>% mutate(samples = rownames(t(TPMFiltData)))
-TMM_df <- as.data.frame(t(TMMFiltData_non2)) %>% mutate(samples = rownames(t(TMMFiltData_non2)))
-#counts_df <- as.data.frame(t(counts_filtered)) %>% mutate(samples = rownames(t(counts_filtered)))
-#one_df_tpm <- left_join(TPM_df, metadf, by="samples")
-one_df_tmm <- left_join(TMM_df, metadf, by="samples") %>% pivot_longer(starts_with("WB"), names_to = "gene", values_to = "TMM")
-wider_tmm <- pivot_wider(one_df_tmm, names_from=samples, values_from=TMM) %>% select(!"gene")
-#one_df_counts <- left_join(counts_df, metadf, by="samples")
-#one_df_tpm <- one_df_tpm %>% pivot_longer(starts_with("WB"), names_to = "gene", values_to = "TPM")
-#one_df_counts <- one_df_counts %>% pivot_longer(starts_with("WB"), names_to = "gene", values_to = "counts")
-#one_df_all <- merge(merge(one_df_tpm, one_df_tmm), one_df_counts)
-
-```
 
 ```{r}
 pairs(as.data.frame(TMMFiltData_non2), pch=1)
@@ -710,93 +702,5 @@ for (i in 1:dim(combos)[2]){
   plot <- ggplot(toplot, aes(x=sample1, y = sample2)) + geom_point() + stat_cor(method="spearman", cor.coef.name = "rho" ) + ylab(combo2) + xlab(combo1) + geom_abline(intercept=0, slope=1, linetype='dashed', color='black') + geom_abline(intercept = 0, slope = 0.5, linetype='dashed', color='blue') + geom_abline(intercept=0, slope=2, linetype='dashed', color='purple') + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + scale_color_manual(values = c('black', 'blue', 'purple'), labels = c("x=y", 'y = x/2', 'y = 2x'))
   print(plot)
 }
-
-```
-
-```{r}
-dds <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ genotype)
-vsd <- vst(dds, blind=FALSE)
-dds <- DESeq(dds)
-```
-
-```{r}
-res_trunc <- results(dds, name = "genotype_MSH5.V5.Trunc4_vs_MSH5.V5") %>% as.data.frame()
-
-res_13A <- results(dds, name = "genotype_MSH5.V5.13A_vs_MSH5.V5") %>% as.data.frame()
-
-```
-
-```{r}
-dds <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ replicate + genotype)
-dds <- DESeq(dds, test="LRT", reduced=~genotype)
-
-```
-
-
-```{r}
-res.05 <- subset(res,padj<0.05) %>% as.data.frame()
-res$diffexpressed <- "NO"
-res$diffexpressed[res$log2FoldChange>2 & res$padj<0.05] <- "UP"
-res$diffexpressed[res$log2FoldChange< -2 & res$padj<0.05] <- "DOWN"
-
-g <- ggplot(data=res, aes(x=log2FoldChange, y=-log10(padj),col=diffexpressed)) + geom_point(size=0.5) + theme_classic()
-g <- g + theme(panel.grid.major = element_line(color = "gray70", size = 0.3, linetype = 3)) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
-g1 <- g + scale_color_manual(values=c("blue", "gray", "red"))
-g1
-```
-
-```{r}
-res$symbol <- gene_table$gene_name[match(rownames(res), gene_table$ensembl_gene_id)]
-res$delabel <- NA
-res$delabel[res$diffexpressed != "NO"] <- res$symbol[res$diffexpressed != "NO"]
-
-gl <- ggplot(res, aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed, label=delabel)) + geom_point() +
-  theme_minimal() + geom_text_repel() + scale_color_manual(values=c("blue", "black", "red")) + geom_vline(xintercept=c(-2, 2), col="red") + geom_hline(yintercept=-log10(0.05), col="red")
-
-gl
-
-```
-
-
-```{r}
-dds2 <- DESeqDataSetFromMatrix(countData = counts_non2_filtered, colData = metadf_non2, design = ~ simplified_genotype2)
-vsd2 <- vst(dds2, blind=FALSE)
-dds2 <- DESeq(dds2)
-res2 <- results(dds2) %>% as.data.frame()
-```
-
-```{r}
-res2.05 <- subset(res2,padj<0.05) %>% as.data.frame()
-res2$diffexpressed <- "NO"
-res2$diffexpressed[res2$log2FoldChange>2 & res2$padj<0.05] <- "UP"
-res2$diffexpressed[res2$log2FoldChange< -2 & res2$padj<0.05] <- "DOWN"
-
-g <- ggplot(data=res2, aes(x=log2FoldChange, y=-log10(padj),col=diffexpressed)) + geom_point(size=0.5) + theme_classic()
-g <- g + theme(panel.grid.major = element_line(color = "gray70", size = 0.3, linetype = 3)) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
-g1 <- g + scale_color_manual(values=c("blue", "gray", "red"))
-g1
-```
-
-```{r}
-res2$symbol <- gene_table$gene_name[match(rownames(res2), gene_table$ensembl_gene_id)]
-res2$delabel <- NA
-res2$delabel[res2$diffexpressed != "NO"] <- res2$symbol[res2$diffexpressed != "NO"]
-
-gl <- ggplot(res2, aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed, label=delabel)) + geom_point() +
-  theme_minimal() + geom_text_repel() + scale_color_manual(values=c("blue", "gray", "red")) + geom_vline(xintercept=c(-2, 2), col="green4") + geom_hline(yintercept=-log10(0.05), col="green4")
-
-gl
-
-```
-
-### note on up vs down-regulated
-
-* Up is upregulated in experimental compared to control
-* Down is downregulated in experimental compared to control
-
-```{r}
-res2.05 <- subset(res2, padj<0.05) %>% arrange(desc(abs(log2FoldChange)))
-
-write.csv(res2.05, "~/mccoyLab/collabs/ykim_rnaseq_20220329/prelim_expvscontrol.csv")
 
 ```
