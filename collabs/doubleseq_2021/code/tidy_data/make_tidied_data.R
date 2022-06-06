@@ -38,7 +38,7 @@ tidy_raw_metadata <- function(meta_file, batch){
     as.data.frame %>% 
     na_if(".") %>% 
     na_if("TBD") %>% 
-    mutate(AMH = as.numeric(as.character(recode(AMH, ">127"="128")))) %>%
+    mutate(AMH = as.numeric(as.character(recode(as.character(AMH), ">127"="128")))) %>%
     mutate(LH = as.numeric(as.character(recode(as.character(LH), ">9"="10")))) %>%
     mutate(E2_Day_2_3 = as.numeric(as.character(recode(as.character(E2_Day_2_3), "<18"="17")))) %>%
     mutate(Embryo_grade_at_freezing = recode(Embryo_grade_at_freezing, "1AA"="Good", "1AB"="Good", "1BA"="Fair", "1BB"="Fair", "1CB"="Poor", "2AA"="Good", "2AB"="Good", "2BA"="Fair", "2BB"="Fair", "2BC"="Fair" ,"2CC"="Poor", "3AA"="Good", "3BB"="Fair")) %>%
