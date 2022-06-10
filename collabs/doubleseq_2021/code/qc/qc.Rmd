@@ -11,12 +11,14 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## original data
+
 ```{r, message=FALSE}
 library(SummarizedExperiment)
 ```
 
 ```{r}
-load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220207.Rdata")
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220609.Rdata")
 ```
 
 ```{r}
@@ -39,6 +41,8 @@ gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
 
 counts_genes <- counts[gene_table$ensembl_gene_id,]
 ```
+
+## number of genes, library size, etc.
 
 ```{r}
 dim(counts)
@@ -75,7 +79,7 @@ ggplot(sample_df, aes(x=1, y=sumsample)) + geom_boxplot() + ylab("Number of samp
 
 ggplot(sample_df, aes(x=1, y=sumsample)) + geom_violin() + ylab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(sample_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 
-ggplot(sample_df, aes(x=sumsample)) + geom_histogram() + xlab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) +ylab("Number of genes")
+ggplot(sample_df, aes(x=sumsample)) + geom_histogram(bins=50) + xlab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) +ylab("Number of genes")
   #+paste0("n=",length(sample_sum))) + 
 
 ```
@@ -119,7 +123,9 @@ samples_20220201 <- read_sampleFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/s
 
 samples_20220207 <- read_sampleFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/samples_20220207.txt")
 
-samples <- rbind(samples_202012, samples_202103, samples_202111, samples_20220201, samples_20220207)
+samples_20220609 <- read_sampleFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/samples_batch3.txt")
+
+samples <- rbind(samples_202012, samples_202103, samples_202111, samples_20220201, samples_20220207, samples_20220609)
 ```
 
 
@@ -134,8 +140,10 @@ uniq_read_num_202103 <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/
 uniq_read_num_202111 <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_num_202111.txt")
 uniq_read_num_20220201 <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_num_20220201.txt")
 uniq_read_num_20220207 <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_num_20220207.txt")
+uniq_read_num_20220609 <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_num_batch3.txt")
 
-uniq_read_num <- rbind(uniq_read_num_202012, uniq_read_num_202103, uniq_read_num_202111, uniq_read_num_20220201, uniq_read_num_20220207)
+
+uniq_read_num <- rbind(uniq_read_num_202012, uniq_read_num_202103, uniq_read_num_202111, uniq_read_num_20220201, uniq_read_num_20220207, uniq_read_num_20220609)
 
 ```
 
@@ -151,8 +159,9 @@ uniq_read_per_202103 <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/
 uniq_read_per_202111 <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_percent_202111.txt")
 uniq_read_per_20220201 <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_percent_20220201.txt")
 uniq_read_per_20220207 <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_percent_20220207.txt")
+uniq_read_per_20220609 <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_percent_batch3.txt")
 
-uniq_read_per <- rbind(uniq_read_per_202012, uniq_read_per_202103, uniq_read_per_202111, uniq_read_per_20220201, uniq_read_per_20220207)
+uniq_read_per <- rbind(uniq_read_per_202012, uniq_read_per_202103, uniq_read_per_202111, uniq_read_per_20220201, uniq_read_per_20220207, uniq_read_per_20220609)
 
 ```
 
@@ -161,6 +170,7 @@ uniq_read_df <- data.frame(sample = samples, num = uniq_read_num, percent = uniq
 two_samples <- uniq_read_df %>% dplyr::arrange(percent)
 two_samples <- two_samples[c(1:2),]
 two_samples$sample
+uniq_read_df$simplified_sample <- str_split(uniq_read_df$sample, "_S", simplify=T)[,1]
 ```
 
 ```{r}
@@ -184,7 +194,144 @@ g1 + geom_jitter(width=0.1, height=0)
 ggplot(uniq_read_df, aes(x=percent)) + geom_histogram(bins=25) + xlab("Percent of uniquely mapped reads per sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + ylab("Number of samples")
 ```
 
+## Replacing with the resequenced samples
+
 ```{r}
+samples_resequenced <- read_sampleFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/samples_resequencedsamples.txt")
+uniq_read_num_resequenced <- read_urnFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_num_resequencedsamples.txt")
+uniq_read_per_resequenced <- read_urpFile("~/mccoyLab/collabs/doubleseq_2021/qc_info/uniq_reads_percent_resequencedsamples.txt")
+uniq_read_df_resequenced <- data.frame(sample = samples_resequenced, num = uniq_read_num_resequenced, percent = uniq_read_per_resequenced)
+uniq_read_df_resequenced$simplified_sample <- str_split(uniq_read_df_resequenced$sample, "_S", simplify=T)[,1]
+
+```
+
+```{r}
+
+compare_df <- left_join(uniq_read_df_resequenced, uniq_read_df, by="simplified_sample") %>% `colnames<-`(c("sample_reseq", "num_uniq_reseq", "percent_uniq_reseq", "sample", "sample_orig", "num_uniq_orig", "percent_uniq_orig")) %>% select("sample_reseq", "sample", "num_uniq_orig", "num_uniq_reseq", "percent_uniq_orig", "percent_uniq_reseq")
+
+```
+
+all uniq read percentages increased for the resequenced samples
+
+```{r}
+
+for (i in 1:length(compare_df$sample)){
+  row_to_replace <- which(uniq_read_df$simplified_sample == compare_df$sample[i])
+  uniq_read_df$sample[row_to_replace] <- compare_df$sample_reseq[i]
+  uniq_read_df$num[row_to_replace] <- compare_df$num_uniq_reseq[i]
+  uniq_read_df$percent[row_to_replace] <- compare_df$percent_uniq_reseq[i]
+}
+
+```
+
+
+now need to replace the counts
+
+```{r}
+counts_genes <- counts_genes %>% `colnames<-`(str_split(colnames(counts_genes), "_S", simplify=T)[,1])
+```
+
+```{r}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220609_resequenced_samples.Rdata")
+counts_reseq <- as.matrix(assays(seAll)$counts)
+counts_genes_reseq <- counts_reseq[gene_table$ensembl_gene_id,] %>% `colnames<-`(str_split(colnames(counts_reseq), "_S", simplify=T)[,1])
+
+
+```
+
+```{r}
+for (i in 1:ncol(counts_genes_reseq)){
+  col_to_replace <- which(colnames(counts_genes) == colnames(counts_genes_reseq)[i])
+  if (i == 1){
+    compare_counts_df <- counts_genes[,col_to_replace] %>% as.data.frame() %>%  `colnames<-`(paste0(colnames(counts_genes)[col_to_replace], "_orig"))
+  } else{
+    compare_counts_df <- cbind(compare_counts_df, counts_genes[,col_to_replace]) %>% `colnames<-`(c(colnames(compare_counts_df), paste0(colnames(counts_genes)[col_to_replace], "_orig")))
+  }
+    compare_counts_df <- cbind(compare_counts_df, counts_genes_reseq[,i]) %>% `colnames<-`(c(colnames(compare_counts_df), paste0(colnames(counts_genes_reseq)[i], "_reseq")))
+    counts_genes[,col_to_replace] <- counts_genes_reseq[,i]
+}
+
+# make a long dataframe and then a heatmap with the differences
+
+```
+
+
+```{r}
+save(counts_genes, file="~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220609_replaced_resequenced_samples.Rdata")
+
+```
+
+```{r}
+
+gene_sum = colSums(counts_genes > 0)
+length(gene_sum)
+mean(gene_sum)
+sd(gene_sum)
+
+gene_df <- data.frame(sumgenes = gene_sum)
+g1 <- ggplot(gene_df, aes(x=1, y=sumgenes)) + geom_boxplot() + ylab("Number of genes with\n at least 1 aligned read within sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(gene_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+g1
+
+g1 + geom_jitter(width=0.1, height=0)
+
+sample_sum = rowSums(counts_genes > 0)
+length(sample_sum)
+mean(sample_sum)
+sd(sample_sum)
+
+sample_df <- data.frame(sumsample = sample_sum)
+ggplot(sample_df, aes(x=1, y=sumsample)) + geom_boxplot() + ylab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(sample_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+ggplot(sample_df, aes(x=1, y=sumsample)) + geom_violin() + ylab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(sample_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+ggplot(sample_df, aes(x=sumsample)) + geom_histogram() + xlab("Number of samples with\n at least 1 aligned read within each gene") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) +ylab("Number of genes")
+
+libsize <- colSums(counts_genes)
+
+length(libsize)
+mean(libsize)
+sd(libsize)
+
+gene_df <- data.frame(libsize = libsize)
+g1 <- ggplot(gene_df, aes(x=1, y=libsize)) + geom_boxplot() + ylab("Number of aligned read within sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(gene_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+g1
+
+g1 + geom_jitter(width=0.1, height=0)
+
+
+ggplot(gene_df, aes(x=libsize)) + geom_histogram(bins=25) + ylab("Number of samples") + xlab("Number of aligned read within sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank())
+
+```
+
+
+```{r}
+g1 <- ggplot(uniq_read_df, aes(x=1, y=num)) + geom_boxplot() + ylab("Number of uniquely mapped reads\nper sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=", nrow(uniq_read_df))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+g1
+
+g1 + geom_jitter(height=0, width=0.1)
+
+
+
+ggplot(uniq_read_df, aes(x=num)) + geom_histogram(bins=25) + ylab("Number of samples") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("Number of uniquely mapped reads per sample")
+
+g1 <- ggplot(uniq_read_df, aes(x=1, y=percent)) + geom_boxplot() + ylab("Percent of uniquely mapped reads\nper sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=", nrow(uniq_read_df))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
+
+g1
+
+g1 + geom_jitter(width=0.1, height=0)
+
+ggplot(uniq_read_df, aes(x=percent)) + geom_histogram(bins=25) + xlab("Percent of uniquely mapped reads per sample") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + ylab("Number of samples")
+
+```
+
+# stop here in re-assess with batch 3
+## Working with batch corrected data
+
+
+```{r, eval=FALSE, echo=FALSE}
 load("~/mccoyLab/collabs/doubleseq_2021/code/batch_correct/combatseq_corrected_withshrinkage.RData")
 
 dim(corrected_jg_rts)
@@ -194,7 +341,7 @@ counts_filter <- corrected_jg_rts[rowMeans(corrected_jg_rts) > 7.63295995515296,
 dim(counts_filter)
 ```
 
-```{r}
+```{r, eval=FALSE, echo=FALSE}
 gene_sum = colSums(counts_filter > 0)
 length(gene_sum)
 mean(gene_sum)
@@ -209,14 +356,14 @@ g1 + geom_jitter(width=0.1, height=0)
 
 ```
 
-```{r}
+```{r, eval=FALSE, echo=FALSE}
 sample_sum = rowSums(counts_filter > 0)
 length(sample_sum)
 mean(sample_sum)
 sd(sample_sum)
 ```
 
-```{r}
+```{r, eval=FALSE, echo=FALSE}
 sample_df <- data.frame(sumsample = sample_sum)
 ggplot(sample_df, aes(x=1, y=sumsample)) + geom_boxplot() + ylab("Number of samples with at least 1\naligned read within each gene\n(adjusted and filtered)") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(sample_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 
@@ -224,7 +371,7 @@ ggplot(sample_df, aes(x=sumsample)) + geom_histogram(bins=30) + xlab("Number of 
 ```
 
 
-```{r}
+```{r, eval=FALSE, echo=FALSE}
 libsize <- colSums(counts_filter)
 length(libsize)
 mean(libsize)
@@ -232,7 +379,7 @@ sd(libsize)
 ```
 
 
-```{r}
+```{r, eval=FALSE, echo=FALSE}
 gene_df <- data.frame(libsize = libsize)
 g1 <- ggplot(gene_df, aes(x=1, y=libsize)) + geom_boxplot() + ylab("Number of aligned read within sample\n(adjusted & filtered)") + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab(paste0("n=",length(gene_sum))) + theme(axis.text.x=element_blank(), axis.ticks.x=element_blank())
 
@@ -247,39 +394,39 @@ ggplot(gene_df, aes(x=libsize)) + geom_histogram(bins=25) + ylab("Number of samp
 
 this section below was from when the second batch was analyzed by itself
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 shapiro.test(uniq_read_df$percent)
 ggplot(uniq_read_df, aes(sample=percent)) + geom_qq() + geom_qq_line() + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("Theoretical Quantiles") + ylab("Observed Quantiles")
 ggplot(uniq_read_df, aes(x=percent)) + geom_histogram() + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("Percent")
 ```
 
-```{r, message=FALSE, eval=FALSE}
+```{r, message=FALSE, eval=FALSE, echo=FALSE}
 library(EnvStats)
 ```
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 rosnerTest(uniq_read_df$percent, k=3, warn=TRUE)
 ```
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 mean(uniq_read_df$percent) + (2 * sd(uniq_read_df$percent))
 mean(uniq_read_df$percent) - (2 * sd(uniq_read_df$percent))
 mean(uniq_read_df$percent) - (3 * sd(uniq_read_df$percent))
 mean(uniq_read_df$percent) - (4 * sd(uniq_read_df$percent))
 ```
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 shapiro.test(uniq_read_df$num)
 ggplot(uniq_read_df, aes(sample=num)) + geom_qq() + geom_qq_line() + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("Theoretical Quantiles") + ylab("Observed Quantiles")
 ggplot(uniq_read_df, aes(x=num)) + geom_histogram() + theme_bw() + theme(panel.background = element_blank(), panel.grid = element_blank()) + xlab("Number")
 ```
 
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 rosnerTest(uniq_read_df$num, k=3, warn=TRUE)
 ```
 
-```{r, eval=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 mean(uniq_read_df$num) + (2 * sd(uniq_read_df$num))
 mean(uniq_read_df$num) - (2 * sd(uniq_read_df$num))
 mean(uniq_read_df$num) - (3 * sd(uniq_read_df$num))
