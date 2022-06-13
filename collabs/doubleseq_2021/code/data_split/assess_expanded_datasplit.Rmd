@@ -16,10 +16,12 @@ library(ggplot2)
 library(scales)
 ```
 
-## Read in metadata from expanded batch 2 split
+## Read in metadata from expanded batch 3 split
 ```{r}
+#including from batch2
+#full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20220308.csv", row.names = 1)
 
-full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20220308.csv", row.names = 1)
+full_meta_withSet <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/meta_withSet_kw_20220613.csv", row.names = 1)
 
 meta_train <- full_meta_withSet[which(full_meta_withSet$set == "train"),]
 train_unique_study_participants <- table(meta_train$Study_Participant_ID)
