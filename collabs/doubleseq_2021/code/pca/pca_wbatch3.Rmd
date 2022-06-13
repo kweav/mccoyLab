@@ -1,0 +1,690 @@
+---
+title: "PCA"
+author: "Kate Weaver"
+date: "1/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r load_packages, message=FALSE, warning=FALSE}
+library(limma)
+library(SummarizedExperiment)
+library(rtracklayer)
+library(tidyverse)
+library(data.table)
+library(readxl)
+library(janitor)
+library(ggrepel)
+library(ggthemes)
+library(edgeR)
+library(plotly)
+library(survcomp)
+library(cowplot)
+library(AnnotationDbi)
+library(EnsDb.Hsapiens.v86)
+library(ggplot2)
+```
+
+importing SummarizedExperiment Data and transforming to raw counts data
+```{r load_data_se}
+load("~/mccoyLab/collabs/doubleseq_2021/summarized_experiment/create_summarized_experiment_20220609_replaced_resequenced_samples.Rdata")
+```
+
+
+```{r load_andsubsetby_gencode}
+#subset to genes with matching gencode ensembl gene IDs on chr1-22
+file_gencode <- "~/genomes/hg38_genome/gencode.v34.annotation.gtf"
+
+gtf <- rtracklayer::import(file_gencode) %>% 
+  as.data.frame() %>% 
+  dplyr::filter(type == "gene") %>% 
+  dplyr::select(gene_id, seqnames, width) %>% 
+  dplyr::rename(ensembl_gene_id = gene_id) %>% 
+  dplyr::rename(chromosome_name = seqnames) %>% 
+  dplyr::rename(length = width)
+
+gene_table <- gtf[match(rownames(counts_genes), gtf$ensembl_gene_id),]
+gene_table <- gene_table[gene_table$chromosome_name %in% paste0("chr", 1:22),]
+counts_genes <- counts_genes[gene_table$ensembl_gene_id,]
+```
+
+import metadata
+
+```{r load_andmatchby_meta}
+meta <- read.csv("~/mccoyLab/collabs/doubleseq_2021/tidied_meta/tidied_meta_CREATE_kw_20220531.csv", row.names = 1) %>% 
+  as.data.frame() %>% 
+  mutate(across(c("AOD", "GC", "Infertility_type", "Previous_pregnancy", "Past_surgical_hist", "Pregnant", "Ongoing_pregnancy", "Final_outcome", "Embryo_grade_at_freezing", "Interpretation", "cDNA_RT_Date", "Library_Prep_Date", "Sequencing_Date", "Study_Participant_ID"), as.factor)) %>%
+  mutate(across(c("InfD_SSM_GC", "InfD_Egg_factor", "InfD_MF", "InfD_Uterine_factor", "InfD_TF", "InfD_RPL", "InfD_RIF", "InfD_Unexplained", "PMdH_none", "PMdH_vasculitis", "PMdH_immune", "PMdH_stress_hormones"), as.factor))
+
+#need to sort so name order is the same for setting up design for DESeq experiment
+counts_order <- order(colnames(counts_genes))
+meta_order <- order(rownames(meta))
+
+countdata <- counts_genes[, counts_order]
+coldata <- meta[meta_order, ]
+```
+
+
+```{r TPM_function}
+#TPM Calculation
+calc_tpm <- function(x, gene.length) {
+  x <- as.matrix(x)
+  len.norm.lib.size <- colSums(x / gene.length)
+  return((t(t(x) / len.norm.lib.size) * 1e06)/ gene.length)
+}
+```
+
+
+```{r TMM_TPM, warning=FALSE}
+
+dgeFullData <- DGEList(countdata, group=as.factor(coldata$Study_Participant_ID))
+TMMFullData <- calcNormFactors(dgeFullData, method="TMM")
+rawTPMvals <- calc_tpm(TMMFullData, gene.length = gene_table$length)
+```
+
+```{r filter}
+tokeep <- rowSums(countdata) > 1
+counts_filtered = countdata[tokeep, ]
+TMMFiltData <- as.matrix(TMMFullData$counts)[tokeep,]
+TPMFiltData <- rawTPMvals[tokeep,]
+
+
+logdata <- log2(countdata + 1)
+tokeep_stringent <- rowMeans(logdata) > 3
+counts_strfilt <- countdata[tokeep_stringent,]
+TMMstrfilt <- as.matrix(TMMFullData$counts)[tokeep_stringent,]
+TPMstrfilt <- rawTPMvals[tokeep_stringent,]
+
+```
+
+## non-stringent filter
+
+### counts
+
+```{r pcarawcount}
+pca_res <- prcomp(t(counts_filtered), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcarawcountcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r pcarawcountcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbia}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawcountcbcolsum}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=colSums(counts_filtered))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+### TMM
+
+```{r pcarawtmm}
+pca_res <- prcomp(t(TMMFiltData), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcarawtmmcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r pcarawtmmcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbia}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtmmcbcolsum}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=colSums(TMMFiltData))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+### TPM
+
+```{r pcarawtpm}
+pca_res <- prcomp(t(TPMFiltData), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcarawtpmcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbua}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcarawtpmcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+## stringent filter
+
+### counts
+
+```{r pcastrcount}
+pca_res <- prcomp(t(counts_strfilt), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcastrcountcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r pcastrcountcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbia}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrcountcbcolsum}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=colSums(counts_strfilt))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+### TMM
+
+```{r pcastrtmm}
+pca_res <- prcomp(t(TMMstrfilt), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcastrtmmcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+```{r pcastrtmmcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbia}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtmmcbcolsum}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=colSums(TMMstrfilt))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+### TPM
+
+```{r pcastrtpm}
+pca_res <- prcomp(t(TPMstrfilt), scale. = TRUE)
+var_explained <- pca_res$sdev^2/sum(pca_res$sdev^2)
+```
+
+```{r pcastrtpmcboutcome}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Pregnant))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbseqd}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Sequencing_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbcdna}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$cDNA_RT_Date))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcblt}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$lining_thickness_mm)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcboa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Oocyte_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbua}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Uterus_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbsa}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=coldata$Sperm_Age)) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbegaf}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Embryo_grade_at_freezing))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+```{r pcastrtpmcbinterpretation}
+pca_res$x %>% as.data.frame %>% 
+  ggplot(aes(y=PC1, x=PC2, color=as.factor(coldata$Interpretation))) + 
+           geom_point() + theme_bw() + 
+           labs(y=paste0("PC1: ", round(var_explained[1]*100, 1), "%"),
+                x=paste0("PC2: ", round(var_explained[2]*100, 1), "%")) +
+           theme(legend.position = "top", panel.background = element_blank(), panel.grid = element_blank())
+```
+
+## batch related-ness
+```{r}
+library(pheatmap)
+counts_lib_norm <- sweep(counts_filtered, 2, colSums(counts_filtered), `/`)
+averaged_batches <- cbind(sapply(1:24, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:24)
+colnames(batchDistMatrix) <- NULL
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists)
+```
+
+```{r}
+library(pheatmap)
+counts_lib_norm <- sweep(counts_strfilt, 2, colSums(counts_strfilt), `/`)
+averaged_batches <- cbind(sapply(1:24, function(x) if (length(which(meta$cDNA_RT_Date == x)) > 1) rowMeans(counts_lib_norm[,which(meta$cDNA_RT_Date == x)]) else counts_lib_norm[,which(meta$cDNA_RT_Date == x)]))
+batchDists <- dist(t(averaged_batches))
+batchDistMatrix <- as.matrix(batchDists)
+rownames(batchDistMatrix) <- paste0("batch", 1:24)
+colnames(batchDistMatrix) <- NULL
+pheatmap(batchDistMatrix, clustering_distance_rows=batchDists)
+```
+

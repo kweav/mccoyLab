@@ -53,6 +53,7 @@ eid_df <- rbind(eid_df, categorize_batch2_pt1[,c("embryoID", "set")])
 
 full_eid_df <- rbind(embryoSet, select(eid_df, "set"))
 #write.csv(full_eid_df, 'data_split/embryo_bySet_full_kw_20211217.csv')
+write.csv(full_eid_df, 'data_split/embryo_bySet_full_kw_20220308.csv')
 full_meta_withSet <- merge(full_eid_df, full_meta, by=0) %>% `rownames<-`(.[,"Row.names"]) %>% select(-"Row.names")
 #write.csv(full_meta_withSet, 'tidied_meta/meta_withSet_kw_20211217.csv')
 write.csv(full_meta_withSet, 'tidied_meta/meta_withSet_kw_20220308.csv')
