@@ -125,24 +125,24 @@ writefmf<-function(fmf,outfile){
 }
 
 #### Arguments and input ####
-#args<-commandArgs(TRUE)
-#if(length(args)!=4){
-#  stop("Usage: Rscript gtypesperm2fmf.R
-#       <1. Path to GATK VariantsToTable output with columns CHROM, POS, ID, REF, ALT. For one chromosome only. >
-#       <2. Path to GenotypeSperm output - if this file ends in .gz, it will be read as a gzip (via linux; may not work on other platforms depending on zcat install) >
-#       <3. Path to no-header list of cell barcodes to include in output >
-#       <4. Output filestem (.fmf file written, as well as GenotypeSperm-format information for SNP observations that were excluded) >
-#       ",call=F)
-#}
+args<-commandArgs(TRUE)
+if(length(args)!=4){
+  stop("Usage: Rscript gtypesperm2fmf.R
+       <1. Path to GATK VariantsToTable output with columns CHROM, POS, ID, REF, ALT. For one chromosome only. >
+       <2. Path to GenotypeSperm output - if this file ends in .gz, it will be read as a gzip (via linux; may not work on other platforms depending on zcat install) >
+       <3. Path to no-header list of cell barcodes to include in output >
+       <4. Output filestem (.fmf file written, as well as GenotypeSperm-format information for SNP observations that were excluded) >
+       ",call=F)
+}
 
-tfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf" #args[1]
-#tfile <- args[1]
-dacfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[2]
-#dacfile <- args[2]
-bcfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[3]
-#bcfile <- args[3]
-outstem<-"~/mccoyLab/rhapsodi_work/hapcut2sims/g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42_" #args[4]
-#outstem <- args[4]
+#tfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf" #args[1]
+tfile <- args[1]
+#dacfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[2]
+dacfile <- args[2]
+#bcfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[3]
+bcfile <- args[3]
+#outstem<-"~/mccoyLab/rhapsodi_work/hapcut2sims/g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42_" #args[4]
+outstem <- args[4]
 
 snptab.glob<-fread.tfile(tfile)
 if(substr(dacfile,nchar(dacfile)-1,nchar(dacfile))=="gz"){ # set up command to read gz
