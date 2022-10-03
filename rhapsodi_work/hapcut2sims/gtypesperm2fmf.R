@@ -148,7 +148,7 @@ snptab.glob<-fread.tfile(tfile)
 if(substr(dacfile,nchar(dacfile)-1,nchar(dacfile))=="gz"){ # set up command to read gz
   dacfile<-paste('zcat',dacfile,sep=' ')
 }
-daconechr.glob<-fread(dacfile,select=c("chr","pos","cell","A","C","G","T","N"))[chr==snptab.glob[1,CHROM]&cell%in%fread(bcfile,header=F)$V1] # keep appropriate chromosome, columns of dac only. (this takes time, memory to read in entire DAC and then subset)
+daconechr.glob<-fread(dacfile,select=c("chr","pos","cell","A","C","G","T","N"))[chr==snptab.glob[1,`#CHROM`]&cell%in%fread(bcfile,header=F)$V1] # keep appropriate chromosome, columns of dac only. (this takes time, memory to read in entire DAC and then subset)
 
 #### Convert to .fmf ####
 bothouts<-tofmf(snptab.glob,daconechr.glob)
