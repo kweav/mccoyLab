@@ -47,7 +47,7 @@ if test -f "${outstem}_gtypesperm.txt"; then
 
   source activate hapcut2
 
-  date; time hapcut2 --fragments ${outstem}.fmf --VCF ${outstem}_variantinfo.vcf --output ${outstem}_hapcut2 --verbose 1 --max_iter 100 %> ${outstem}_hapcut2.out 
+  date; time hapcut2 --fragments ${outstem}.fmf --VCF ${outstem}_variantinfo.vcf --output ${outstem}_hapcut2 --verbose 1 --max_iter 100 &> ${outstem}_hapcut2.out 
 
   conda deactivate
 
