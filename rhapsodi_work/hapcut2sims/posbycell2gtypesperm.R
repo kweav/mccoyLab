@@ -5,6 +5,12 @@
 require(data.table, quietly=T)
 require(tidyverse, quietly=T)
 
+##### Arguments and input ####
+args <- commandArgs(trailingOnly=TRUE)
+pbcfile <- args[1]
+outstem <- args[2]
+
+
 ##### Functions #####
 fread.mfile <- function(mfile, hetOnly = TRUE){
   # Reads in matrix with first column positions, second column on are different gametes
@@ -70,10 +76,14 @@ mattogs <- function(mat, positions){
 }
 
 set.seed(789)
-read_out <- fread.mfile("runGen_gam_1000_snp_30000_cov_0.001_seqerr_0.005_avgr_1_rs_42_gametedf_na_truth_afseqednm.csv")
+#read_out <- fread.mfile("runGen_gam_1000_snp_30000_cov_0.001_seqerr_0.005_avgr_1_rs_42_gametedf_na_truth_afseqednm.csv")
+read_out <- fread.mfile(pbcfile)
 togs_out <- mattogs(read_out$out_mat, read_out$positions[[1]])
 cell_barcodes <- colnames(read_out$out_mat)
 
-write.table(togs_out$gs, file = "~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", row.names = FALSE)
-write.table(togs_out$gatkvar, file="~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf", row.names = FALSE, sep = "\t", quote=FALSE)
-write.table(cell_barcodes, file="~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", col.names = FALSE, row.names = FALSE, quote = FALSE)
+#write.table(togs_out$gs, file = "~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", row.names = FALSE)
+write.table(togs_out$gs, file = paste0(outstem, "_gtypesperm.txt"), row.names = FALSE)
+#write.table(togs_out$gatkvar, file="~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf", row.names = FALSE, sep = "\t", quote=FALSE)
+write.table(togs_out$gatkvar, file = paste0(outstem, "_variantinfo.vcf"), row.names = FALSE, sep = "\t", quote=FALSE)
+#write.table(cell_barcodes, file="~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", col.names = FALSE, row.names = FALSE, quote = FALSE)
+write.table(cell_barcodes, file=paste0(outstem, "_cellbarcodes.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
