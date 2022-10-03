@@ -51,6 +51,6 @@ if test -f "${outstem}_gtypesperm.txt"; then
 
   conda deactivate
 
-  Rscript build_haplotypes.R ${outstem}_hapcut.phased.VCF $truephase $outstem
+  Rscript build_haplotypes.R ${outstem}_hapcut2.phased.VCF $truephase $outstem
 
 fi
