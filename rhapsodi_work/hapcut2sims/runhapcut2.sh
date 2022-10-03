@@ -45,7 +45,7 @@ if test -f "${outstem}_gtypesperm.txt"; then
 
   Rscript gtypesperm2fmf.R ${outstem}_variantinfo.vcf ${outstem}_gtypesperm.txt ${outstem}_cellbarcodes.txt $outstem
 
-  conda activate hapcut2
+  source activate hapcut2
 
   date; time hapcut2 --fragments ${outstem}.fmf --VCF ${outstem}_variantinfo.vcf --output ${outstem}_hapcut2 --verbose 1 --max_iter 100 %> ${outstem}_hapcut2.out 
 
