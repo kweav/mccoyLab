@@ -23,7 +23,7 @@ true_dh <- read.delim(true_donor_haps_file, sep=",", na.strings = c("NA"))
 if (nrow(true_dh) == nrow(genotypes)){
   assess_out <- rhapsodi::sim_assess_phasing(true_dh, genotypes, nrow(true_dh))
   save(assess_out, file = paste0(args[3], "_hapcut2_assess_out.Rdata"))
-  save(assess_out, file=paste0(args[3], "_hapcut2_phased_out.Rdata"))
+  save(genotypes, file=paste0(args[3], "_hapcut2_phased_out.Rdata"))
 } else{
   message("want to figure out which positions are missing")
 }
