@@ -10,7 +10,7 @@ fread.tfile<-function(tfile){
   return(out)
 }
 
-tofmf<-function(snptab,daconechr){
+tofmf<-function(snptab,daconechr, myn=10){
   # Converts GenotypeSperm output to .fmf-style data.table. Keeps track of observations of SNPs that aren't included (those that observe multiple alleles in one cell, observations of non-ref or alt allele)
   # In: snptab, output of fread.tfile with columns #CHROM, POS, ID, REF, ALT, ind
   #     daconechr, GenotypeSperm output for the one chromosome in snptab; only the following columns: "chr","pos","cell","A","C","G","T","N"
@@ -72,7 +72,6 @@ tofmf<-function(snptab,daconechr){
     # In: onecell, datatable containing observations of all SNPs for one cell. Must have columns POS, REF, ALT, ind, A, C, G, T
     #     myn, number of SNP observations at or below which this cell won't be included. Must be at least 1. For dealing with absence of chromosomes, largely.
     # Out: list with one character vector for each pair. Character vectors structured as described in onefrag() [unless fewer than myn, then null]
-    
     if(nrow(onecell)>myn){  # deal with any cells with only few observations (very occasional aneuploidy)
       out<-lapply(1:(nrow(onecell)-1),function(x) onefrag(onecell[x:(x+1),]))
       return(out)
@@ -88,15 +87,20 @@ tofmf<-function(snptab,daconechr){
   }
     
   # Drop any SNP observations of multiple alleles, non-ref or alt alleles
-  ckbads<-daconechr[,idfails(.SD),by=row.names(daconechr)]$V1 # need to retain as data.table. Unfortunately, this is quite slow. Takes 43 seconds for 10k observations
+  ckbads<-daconechr[,idfails(.SD),by=list(row.names(daconechr))]$V1 # need to retain as data.table. Unfortunately, this is quite slow. Takes 43 seconds for 10k observations
   bads<-daconechr[ckbads,.(`#CHROM`,POS,ID,REF,ALT,cell,A,C,G,T,N)]
   daconechr<-daconechr[!ckbads,]
-  cat(paste("SNP observations to exclude identified (chromosome",daconechr[1,`#CHROM`],")\n")) # for tracking
-
+  if (sum(ckbads) > 0){ 
+    cat(paste("SNP observations to exclude identified (chromosome",daconechr[1,`#CHROM`],")\n")) # for tracking
+  }
+  
   # Create FMFs on per-cell basis
   setkeyv(daconechr,c("cell","POS"))
-  fmf<-daconechr[,list(list(onecell.frags(.SD,myn=10))),by=cell] # using a list column: vector will display with commas
+  fmf<-daconechr[,list(list(onecell.frags(.SD,myn=myn))),by=cell] # using a list column: vector will display with commas
   fmf<-fmf[sapply(fmf$V1,length)>0,] # get rid of nulls. Now each cell is a list of lists.
+  if (nrow(fmf) == 0){
+    stop("No fmf conversion possible due to myn argument")
+  }
   cat(paste("Initial FMF info generated (chromosome",daconechr[1,`#CHROM`],")\n")) # for tracking
   
   # Return fmf, excludeds
@@ -135,13 +139,9 @@ if(length(args)!=4){
        ",call=F)
 }
 
-#tfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf" #args[1]
 tfile <- args[1]
-#dacfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[2]
 dacfile <- args[2]
-#bcfile<-"~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt" #args[3]
 bcfile <- args[3]
-#outstem<-"~/mccoyLab/rhapsodi_work/hapcut2sims/g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42_" #args[4]
 outstem <- args[4]
 
 snptab.glob<-fread.tfile(tfile)
@@ -151,7 +151,7 @@ if(substr(dacfile,nchar(dacfile)-1,nchar(dacfile))=="gz"){ # set up command to r
 daconechr.glob<-fread(dacfile,select=c("chr","pos","cell","A","C","G","T","N"))[chr==snptab.glob[1,`#CHROM`]&cell%in%fread(bcfile,header=F)$V1] # keep appropriate chromosome, columns of dac only. (this takes time, memory to read in entire DAC and then subset)
 
 #### Convert to .fmf ####
-bothouts<-tofmf(snptab.glob,daconechr.glob)
+bothouts<-tofmf(snptab.glob,daconechr.glob, myn=1)
 
 # save
 write.table(bothouts[[2]],paste(outstem,".excludedsnpobs.txt",sep=""),quote=F,row.names=F,sep="\t")

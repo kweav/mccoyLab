@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=185GB
 #SBATCH --account=rmccoy22
-#SBATCH --array=1-5832%24
+#SBATCH --array=2917-5832
 
 ml r/4.0.2
 ml anaconda
@@ -33,9 +33,8 @@ input_gen_file="_gametedf_na_truth_afseqednm.csv"
 pbcfile="${filelocation_base1a}${filelocation_base2a}/${genfile_base}${input_gen_file}"
 true_phase="${filelocation_base1a}${filelocation_base2a}/${genfile_base}${true_phasing_file}"
 
-if ( [ ${arg_arr[3]} == "0.005" ] && [ ${arg_arr[4]} == "1" ] ); then
-  outstem="${filelocation_base1a}${filelocation_base2a}/${filelocation_base2a}_rs${arg_arr[5]}"
-else
+if ( [ ${arg_arr[3]} != "0.005" ] && [ ${arg_arr[4]} != "1" ] ); then
+  mkdir -p ${filelocation_base1b}${filelocation_base2b}
   outstem="${filelocation_base1b}${filelocation_base2b}/${filelocation_base2a}_rs${arg_arr[5]}"
 fi
 

@@ -60,7 +60,6 @@ togs <- function(genotypes, barcodes, position, chr = "chrS"){
     to_return <- data.frame()
   }
   return(list(gs = to_return, gatkvar = gatkvar_toreturn))
-  #why does gs only have 7 rows?
 }
 
 mattogs <- function(mat, positions){
@@ -71,19 +70,14 @@ mattogs <- function(mat, positions){
     gs <- rbind(gs, out$gs )
     gatkvar <- rbind(gatkvar, out$gatkvar)
   }
-  #rbindlist two separate dataframes in a returned list?s
   return(list(gs = gs, gatkvar = gatkvar))
 }
 
 set.seed(789)
-#read_out <- fread.mfile("runGen_gam_1000_snp_30000_cov_0.001_seqerr_0.005_avgr_1_rs_42_gametedf_na_truth_afseqednm.csv")
 read_out <- fread.mfile(pbcfile)
 togs_out <- mattogs(read_out$out_mat, read_out$positions[[1]])
 cell_barcodes <- colnames(read_out$out_mat)
 
-#write.table(togs_out$gs, file = "~/mccoyLab/rhapsodi_work/hapcut2sims/gtypesperm_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", row.names = FALSE)
 write.table(togs_out$gs, file = paste0(outstem, "_gtypesperm.txt"), row.names = FALSE)
-#write.table(togs_out$gatkvar, file="~/mccoyLab/rhapsodi_work/hapcut2sims/variantinfo_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.vcf", row.names = FALSE, sep = "\t", quote=FALSE)
 write.table(togs_out$gatkvar, file = paste0(outstem, "_variantinfo.vcf"), row.names = FALSE, sep = "\t", quote=FALSE)
-#write.table(cell_barcodes, file="~/mccoyLab/rhapsodi_work/hapcut2sims/cellbarcodes_g1000_s30000_cov_0.001_seqerr_0.005_avgr_1_rs42.txt", col.names = FALSE, row.names = FALSE, quote = FALSE)
 write.table(cell_barcodes, file=paste0(outstem, "_cellbarcodes.txt"), col.names = FALSE, row.names = FALSE, quote = FALSE)
